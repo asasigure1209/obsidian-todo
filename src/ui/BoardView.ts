@@ -1,16 +1,17 @@
-import { ItemView } from "obsidian";
+import { ItemView, type WorkspaceLeaf } from "obsidian";
 import { mount, unmount } from "svelte";
 import type { Clock } from "@/domain/clock";
 import { toDayKey } from "@/domain/day";
 import Board from "./Board.svelte";
 
 export const BOARD_VIEW_TYPE = "daily-kanban-todo-board";
+export const BOARD_ICON = "square-kanban";
 
 export class BoardView extends ItemView {
   private board: ReturnType<typeof mount> | undefined;
 
   constructor(
-    leaf: ConstructorParameters<typeof ItemView>[0],
+    leaf: WorkspaceLeaf,
     private readonly clock: Clock,
   ) {
     super(leaf);
@@ -25,7 +26,7 @@ export class BoardView extends ItemView {
   }
 
   override getIcon(): string {
-    return "square-kanban";
+    return BOARD_ICON;
   }
 
   override async onOpen(): Promise<void> {

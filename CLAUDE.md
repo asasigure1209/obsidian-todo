@@ -17,7 +17,7 @@ pnpm dev                                     # build/ へ監視ビルド（dev-v
 pnpm build                                   # 本番ビルド
 pnpm check                                   # Biome：整形・Lint・層の境界・循環参照
 pnpm fix                                     # Biome の自動修正
-pnpm typecheck                               # tsc --noEmit と svelte-check
+pnpm typecheck                               # svelte-check（.ts も含めて型を検査）
 pnpm test                                    # Vitest
 pnpm vitest run tests/domain/minutes.test.ts # 1ファイルだけ
 pnpm vitest run -t "分未満を切り捨てる"        # テスト名で絞る
@@ -37,7 +37,7 @@ pnpm verify                                  # CI と同じ全項目
 
 ## 層の境界（Biome が強制）
 
-`src/` は `domain/`（純粋な TS）・`app/`・`adapters/`・`ui/`（Svelte と `BoardView.ts`）と、組み立て役の `main.ts`。許される import は `docs/architecture.md` の AD-10 の表のとおりで、`biome.json` の `overrides` に層ごとの `noRestrictedImports` として書かれている。
+`src/` は `domain/`（純粋な TS）・`app/`・`adapters/`・`ui/`（Svelte と `BoardView.ts`）と、組み立て役の `main.ts`。許される import は `docs/architecture.md` の AD-10 の表のとおりで、`biome.json` の `overrides` に層ごとの `noRestrictedImports` として書かれている。Biome は override でルールの options を置き換えるため、各層の override は共通の `../` 禁止を毎回含む必要がある。`tests/config/biome-boundaries.test.ts` がこれと「`src/` の各層に override があること」を検査する。
 
 - 層をまたぐ import は必ず `@/層名/...` で書く。`../` は禁止（相対パスだと境界の検査をすり抜ける）。同じフォルダ内は `./`
 - `domain/` は `obsidian` も `svelte` も import しない。現在時刻なども引数か、`domain/` に置いた型（例：`domain/clock.ts` の `Clock`）経由で受け取る

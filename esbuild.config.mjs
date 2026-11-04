@@ -32,7 +32,6 @@ const context = await esbuild.context({
   plugins: [esbuildSvelte({ compilerOptions: { css: "injected" } })],
   sourcemap: production ? false : "inline",
   minify: production,
-  treeShaking: true,
   logLevel: "info",
 });
 

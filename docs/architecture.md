@@ -188,7 +188,7 @@ pnpm dev              # build/ へ監視ビルド
 | コマンド | 内容 |
 |---|---|
 | `pnpm check` / `pnpm fix` | Biome の整形・Lint・境界の検査／自動修正 |
-| `pnpm typecheck` | `tsc` と `svelte-check` |
+| `pnpm typecheck` | `svelte-check`（`.ts` も含めて型を検査） |
 | `pnpm test` / `pnpm coverage` | Vitest。カバレッジは `src/domain/` に 90% の下限 |
 | `pnpm build` | 本番ビルド（`build/`） |
 | `pnpm verify` | 上の全部（CI と同じ） |

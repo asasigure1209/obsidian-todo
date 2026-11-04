@@ -1,14 +1,16 @@
 import { Plugin } from "obsidian";
 import { systemClock } from "@/adapters/clock";
-import { BOARD_VIEW_TYPE, BoardView } from "@/ui/BoardView";
+import { BOARD_ICON, BOARD_VIEW_TYPE, BoardView } from "@/ui/BoardView";
+
+const OPEN_BOARD_LABEL = "今日のボードを開く";
 
 export default class DailyKanbanTodoPlugin extends Plugin {
   override async onload(): Promise<void> {
     this.registerView(BOARD_VIEW_TYPE, (leaf) => new BoardView(leaf, systemClock));
-    this.addRibbonIcon("square-kanban", "今日のボードを開く", () => this.activateView());
+    this.addRibbonIcon(BOARD_ICON, OPEN_BOARD_LABEL, () => this.activateView());
     this.addCommand({
       id: "open-board",
-      name: "今日のボードを開く",
+      name: OPEN_BOARD_LABEL,
       callback: () => this.activateView(),
     });
   }
