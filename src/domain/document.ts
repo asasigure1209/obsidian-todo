@@ -143,6 +143,11 @@ function toSegment(line: Line): Segment {
   return todo ? { kind: "todo", todo, head: line, children: [] } : { kind: "fixed", line };
 }
 
+/** TODO ブロックだけを、本文の順番で。n 番目がコマンドの LineRef の index になる（AD-5） */
+export function todoBlocks(segments: Segment[]): TodoBlock[] {
+  return segments.filter((segment): segment is TodoBlock => segment.kind === "todo");
+}
+
 function segmentLines(segment: Segment): Line[] {
   return segment.kind === "todo" ? [segment.head, ...segment.children] : [segment.line];
 }
