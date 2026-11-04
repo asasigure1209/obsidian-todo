@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 整形・Lint・層の境界（Biome）
+        run: pnpm exec biome ci .
+      - name: 型チェック
+        run: pnpm typecheck
+      - name: テストとカバレッジ
+        run: pnpm coverage
+      - name: ビルド
+        run: pnpm build

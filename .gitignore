@@ -1,2 +1,10 @@
 .DS_Store
 node_modules/
+build/
+coverage/
+# 開発用Vault：Obsidian の状態ファイルは管理しない
+dev-vault/.obsidian/*
+!dev-vault/.obsidian/community-plugins.json
+!dev-vault/.obsidian/plugins/
+dev-vault/.obsidian/plugins/*
+!dev-vault/.obsidian/plugins/daily-kanban-todo

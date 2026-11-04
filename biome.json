@@ -1,0 +1,204 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!**/*.md", "!dev-vault/.obsidian", "!pnpm-lock.yaml"]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "html": {
+    "experimentalFullSupportEnabled": true,
+    "formatter": {
+      "enabled": true
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "rules": {
+      "preset": "recommended",
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 5
+          }
+        }
+      },
+      "suspicious": {
+        "noImportCycles": "error"
+      },
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["../**", "..", "src/**"],
+                "message": "層をまたぐ import は `@/層名/...` の形で書きます（境界ルールを効かせるため）。"
+              }
+            ],
+            "paths": {}
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/domain/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["../**", "..", "src/**"],
+                    "message": "層をまたぐ import は `@/層名/...` の形で書きます（境界ルールを効かせるため）。"
+                  },
+                  {
+                    "group": ["@/app/**", "@/adapters/**", "@/ui/**"],
+                    "message": "domain/ はほかの層を import できません（AD-1）。"
+                  }
+                ],
+                "paths": {
+                  "obsidian": "domain/ は Obsidian に依存させません（AD-1）。",
+                  "svelte": "domain/ は UI に依存させません（AD-1）。"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/app/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["../**", "..", "src/**"],
+                    "message": "層をまたぐ import は `@/層名/...` の形で書きます（境界ルールを効かせるため）。"
+                  },
+                  {
+                    "group": ["@/ui/**"],
+                    "message": "app/ は ui/ を import できません。"
+                  }
+                ],
+                "paths": {
+                  "obsidian": "app/ は Obsidian を直接使わず、adapters/ を経由します。",
+                  "svelte": "app/ は UI に依存させません。"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/adapters/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["../**", "..", "src/**"],
+                    "message": "層をまたぐ import は `@/層名/...` の形で書きます（境界ルールを効かせるため）。"
+                  },
+                  {
+                    "group": ["@/app/**", "@/ui/**"],
+                    "message": "adapters/ が import できるのは domain/ だけです。"
+                  }
+                ],
+                "paths": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/ui/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["../**", "..", "src/**"],
+                    "message": "層をまたぐ import は `@/層名/...` の形で書きます（境界ルールを効かせるため）。"
+                  },
+                  {
+                    "group": ["@/adapters/**"],
+                    "message": "ui/ は adapters/ を直接使わず、app/ を経由します。"
+                  }
+                ],
+                "paths": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/ui/**/*.svelte"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["../**", "..", "src/**"],
+                    "message": "層をまたぐ import は `@/層名/...` の形で書きます（境界ルールを効かせるため）。"
+                  },
+                  {
+                    "group": ["@/adapters/**"],
+                    "message": "ui/ は adapters/ を直接使わず、app/ を経由します。"
+                  }
+                ],
+                "paths": {
+                  "obsidian": "Svelte コンポーネントから Obsidian を直接使いません（使えるのは BoardView.ts だけ）。"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["tests/**"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
+          }
+        }
+      }
+    }
+  ]
+}

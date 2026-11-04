@@ -1,0 +1,7 @@
+# コミット前：コミットするファイルだけに Biome の整形と Lint をかける（直せるものは直して取り込む）
+pre-commit:
+  jobs:
+    - name: biome
+      glob: "*.{js,mjs,ts,svelte,json,jsonc,css}"
+      run: pnpm exec biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true

@@ -1,0 +1,9 @@
+{
+  "id": "daily-kanban-todo",
+  "name": "Daily Kanban TODO",
+  "version": "0.1.0",
+  "minAppVersion": "1.7.2",
+  "description": "1日単位のカンバン型TODOボード。ポモドーロで作業時間を記録します。",
+  "author": "asasigure1209",
+  "isDesktopOnly": true
+}

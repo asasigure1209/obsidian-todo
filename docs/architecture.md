@@ -115,6 +115,30 @@
 - **決定：** TypeScript＋esbuild（Obsidian の公式サンプルプラグインに準拠）。テストは Vitest で、ドメイン層を重点的に書く。UI は手動での確認を基本にする
 - **理由：** 標準的な構成で迷う要素を減らす。不具合が起きると困るのはデータとタイマーのルールなので、そこに厚くテストを書く
 
+### AD-10 コード品質は Biome 1つで守り、コミット前と CI の2か所で止める
+
+- **決定：**
+  - 整形と Lint は Biome だけで行う（Prettier・ESLint は使わない）
+  - 認知複雑度の上限は **5**（テストコードは対象外）
+  - 層の境界も Biome の `noRestrictedImports` で守る。層ごとに禁止する import を設定する（下の表）
+  - 層をまたぐ import は `@/層名/...` の別名で書く。`../` で始まる import は禁止する（相対パスだと層の判定をすり抜けるため）
+  - 循環参照は Biome の `noImportCycles` で禁止する
+  - コミット前は lefthook でコミットするファイルだけを検査し、直せるものは直して取り込む。push と PR では GitHub Actions で全項目（整形・Lint・境界、型、テストとカバレッジ、ビルド）を実行する
+- **理由：** 道具を1つにして設定と依存を減らす。複雑度を低く抑えて、ルールを遷移表と小さな関数で書くことを促す。境界の違反を、レビューではなく機械で止める
+- **影響：**
+  - Obsidian 公式の lint ルール（ESLint 専用）は使えない。コミュニティストアに公開する段階で改めて検討する
+  - Biome の Svelte 対応は試験段階。誤検出が出たら `.svelte` ファイルだけ該当ルールを外す
+  - 「型だけ import してよい」（`adapters/` → `domain/`、`ui/` → `domain/`）は Biome では区別できないため、レビューで守る
+  - Markdown は Biome の対象外（日本語の表が崩れるため）
+
+| 層 | import してよいもの | `obsidian` | `svelte` |
+|---|---|---|---|
+| `domain/` | なし | 禁止 | 禁止 |
+| `app/` | `domain/`, `adapters/` | 禁止 | 禁止 |
+| `adapters/` | `domain/` | 許可 | 許可 |
+| `ui/` | `app/`, `domain/` | `BoardView.ts` だけ許可（`.svelte` では禁止） | 許可 |
+| `main.ts` | すべて | 許可 | 許可 |
+
 ---
 
 ## 3. ディレクトリ構成（案）
@@ -128,6 +152,7 @@ src/
     timer.ts              タイマーの状態遷移と経過分の計算（AD-6）
     carryover.ts          前日の未完了の複製（design 7.8）
     schedule.ts           予定・就業時間・休憩から、集中できる時間を出す（design 8.2）
+    clock.ts              現在時刻の取得元の型（実体は adapters/clock.ts）
   app/
     board-service.ts      コマンドを受け、vault.process で書き戻す（AD-3）
   adapters/
@@ -144,7 +169,33 @@ tests/
 
 ---
 
-## 4. テストで必ず押さえること
+## 4. 開発環境
+
+### 準備
+
+```bash
+mise install          # Node 24
+pnpm install          # 依存とコミット前のフック（lefthook）を入れる
+pnpm dev              # build/ へ監視ビルド
+```
+
+- 動作確認は `dev-vault/` を Obsidian で Vault として開いて行う。`dev-vault/.obsidian/plugins/daily-kanban-todo` は `build/` へのシンボリックリンク
+- 変更をすぐ反映させるには、`dev-vault` に Hot Reload プラグイン（pjeby/hot-reload）を本人が入れる。`pnpm dev` が `build/.hotreload` を作るので、ビルドのたびに再読み込みされる
+- `dev-vault/TODO/` には、書式外の行・字下げしたメモ・`events` を含むサンプルを置いている
+
+### コマンド
+
+| コマンド | 内容 |
+|---|---|
+| `pnpm check` / `pnpm fix` | Biome の整形・Lint・境界の検査／自動修正 |
+| `pnpm typecheck` | `tsc` と `svelte-check` |
+| `pnpm test` / `pnpm coverage` | Vitest。カバレッジは `src/domain/` に 90% の下限 |
+| `pnpm build` | 本番ビルド（`build/`） |
+| `pnpm verify` | 上の全部（CI と同じ） |
+
+---
+
+## 5. テストで必ず押さえること
 
 - 読んでそのまま書き戻すと、元の本文と完全に一致する（書式外の行、空行、改行コード、インデント）
 - 各コマンドの後も、固定行が元の位置に残る。TODO ブロック内のメモは、並べ替えた後もそのカードの下にある
@@ -156,7 +207,7 @@ tests/
 
 ---
 
-## 5. 実装しながら決めること
+## 6. 実装しながら決めること
 
 | 論点 | 方針の目安 |
 |---|---|
