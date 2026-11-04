@@ -70,8 +70,14 @@ export function parseDocument(body: string): DayDocument {
 }
 
 export function serializeDocument(doc: DayDocument): string {
-  const lines = [...doc.frontmatter, ...doc.segments.flatMap(segmentLines)];
-  return lines.map((line) => line.text + line.eol).join("");
+  return documentLines(doc)
+    .map((line) => line.text + line.eol)
+    .join("");
+}
+
+/** frontmatter から本文の末尾までの全行 */
+export function documentLines(doc: DayDocument): Line[] {
+  return [...doc.frontmatter, ...doc.segments.flatMap(segmentLines)];
 }
 
 function splitLines(body: string): Line[] {
