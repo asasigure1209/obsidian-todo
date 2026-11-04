@@ -8,9 +8,10 @@ export class VaultDayFiles implements DayFiles {
     private readonly folder: string,
   ) {}
 
+  /** 変更の直後に読むので、キャッシュではなくディスクから読む */
   async read(dayKey: string): Promise<string | undefined> {
     const file = this.vault.getFileByPath(this.pathOf(dayKey));
-    return file ? this.vault.cachedRead(file) : undefined;
+    return file ? this.vault.read(file) : undefined;
   }
 
   /** 名前の変更は、その日のファイルへ変わったときも、その日のファイルから変わったときも知らせる */

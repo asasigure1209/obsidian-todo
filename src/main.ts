@@ -23,7 +23,11 @@ export default class DailyKanbanTodoPlugin extends Plugin {
     const { workspace } = this.app;
     const existing = workspace.getLeavesOfType(BOARD_VIEW_TYPE)[0];
     if (existing) {
+      // revealLeaf で遅延読み込みのビューが読み込まれるので、その後に今日へ切り替える
       await workspace.revealLeaf(existing);
+      if (existing.view instanceof BoardView) {
+        await existing.view.showToday();
+      }
       return;
     }
     const leaf = workspace.getLeaf("tab");

@@ -11,6 +11,7 @@ export const BOARD_ICON = "square-kanban";
 
 export class BoardView extends ItemView {
   private board: ReturnType<typeof mount> | undefined;
+  private dayKey: string | undefined;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -34,16 +35,38 @@ export class BoardView extends ItemView {
 
   /** 開いた時点の日付で固定する。開いたまま日付が変わっても切り替えない（architecture 6章） */
   override async onOpen(): Promise<void> {
-    const dayKey = toDayKey(this.clock.now());
-    this.board = mount(Board, {
-      target: this.contentEl,
-      props: { dayKey, boardState: watchBoard(this.files, dayKey) },
-    });
+    this.mountBoard();
   }
 
   override async onClose(): Promise<void> {
-    if (this.board) {
-      await unmount(this.board);
+    await this.unmountBoard();
+  }
+
+  /** ボードを開き直したとき、表示している日が今日でなければ今日に切り替える */
+  async showToday(): Promise<void> {
+    if (this.dayKey !== toDayKey(this.clock.now())) {
+      await this.unmountBoard();
+      this.mountBoard();
     }
   }
+
+  private mountBoard(): void {
+    const dayKey = toDayKey(this.clock.now());
+    this.dayKey = dayKey;
+    this.board = mount(Board, {
+      target: this.contentEl,
+      props: { dayKey, boardState: watchBoard(this.files, dayKey, reportError) },
+    });
+  }
+
+  private async unmountBoard(): Promise<void> {
+    if (this.board) {
+      await unmount(this.board);
+      this.board = undefined;
+    }
+  }
+}
+
+function reportError(error: unknown): void {
+  console.error("[daily-kanban-todo] ボードを描けませんでした", error);
 }

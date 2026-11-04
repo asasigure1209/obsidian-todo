@@ -18,7 +18,7 @@ const { title, status, cards }: Props = $props();
     <span class="count">{cards.length}</span>
   </h3>
   <ol class="cards">
-    {#each cards as card, i (card.ref.index)}
+    {#each cards as card, i (card.key)}
       <li>
         <Card {card} {status} number={status === "todo" ? i + 1 : undefined} />
       </li>

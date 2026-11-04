@@ -81,6 +81,14 @@ describe("toBoard", () => {
     expect(done[0]?.ref).toEqual({ index: 2, text: "- [x] 経費精算を提出 [est:: 小]" });
   });
 
+  it("カードの key は行の文字列と、同じ文字列の何件目か。上に TODO が増えても変わらない", () => {
+    const before = boardOf("- [ ] a\n- [ ] b\n- [ ] a\n");
+    const after = boardOf("- [ ] 新しい\n- [ ] a\n- [ ] b\n- [ ] a\n");
+
+    expect(before.todo.map((c) => c.key)).toEqual(["- [ ] a#0", "- [ ] b#0", "- [ ] a#1"]);
+    expect(after.todo.slice(1).map((c) => c.key)).toEqual(before.todo.map((c) => c.key));
+  });
+
   it("空の本文は3列とも空", () => {
     expect(boardOf("")).toEqual({ todo: [], doing: [], done: [] });
   });
@@ -92,6 +100,16 @@ describe("toBoard", () => {
         const blocks = doc.segments.filter((s) => s.kind === "todo");
 
         expect(allCards(toBoard(doc))).toHaveLength(blocks.length);
+      }),
+    );
+  });
+
+  it("どんな本文でも、カードの key は重ならない", () => {
+    fc.assert(
+      fc.property(markdownLike, (body) => {
+        const keys = allCards(boardOf(body)).map((c) => c.key);
+
+        expect(new Set(keys).size).toBe(keys.length);
       }),
     );
   });

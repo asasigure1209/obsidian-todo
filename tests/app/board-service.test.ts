@@ -11,7 +11,9 @@ const summary = (state: BoardState) =>
 /** 購読して、受け取った状態を記録する */
 function record(files: FakeDayFiles, dayKey = today) {
   const states: ReturnType<typeof summary>[] = [];
-  const unsubscribe = watchBoard(files, dayKey).subscribe((state) => states.push(summary(state)));
+  const unsubscribe = watchBoard(files, dayKey, (error) => {
+    throw error;
+  }).subscribe((state) => states.push(summary(state)));
   return { states, unsubscribe };
 }
 
@@ -108,6 +110,39 @@ describe("watchBoard", () => {
     await settle();
 
     expect(states).toEqual(["loading", ["a"], ["c"]]);
+  });
+
+  it("最初の読み込みに失敗したら、読めなかったことを受け取る。次の変更で読み直す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, "- [ ] a\n");
+    files.failNextRead = true;
+    const { states } = record(files);
+    await settle();
+
+    files.write(today, "- [ ] b\n");
+    await settle();
+
+    expect(states).toEqual(["loading", "unreadable", ["b"]]);
+  });
+
+  it("受け取る側が例外を投げても、次の変更を受け取り続ける", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, "- [ ] a\n");
+    const received: BoardState[] = [];
+    const errors: unknown[] = [];
+    watchBoard(files, today, (error) => errors.push(error)).subscribe((state) => {
+      received.push(state);
+      if (state.kind === "board") {
+        throw new Error("描けない");
+      }
+    });
+    await settle();
+
+    files.write(today, "- [ ] b\n");
+    await settle();
+
+    expect(received.map(summary)).toEqual(["loading", ["a"], ["b"]]);
+    expect(errors).toHaveLength(2);
   });
 
   it("購読をやめると、変更を受けず、変更の購読も外す", async () => {

@@ -23,6 +23,8 @@ const { dayKey, boardState }: Props = $props();
     </div>
   {:else if $boardState.kind === "missing"}
     <p class="message">今日のファイルがありません</p>
+  {:else if $boardState.kind === "unreadable"}
+    <p class="message">今日のファイルを読めませんでした。ファイルを保存し直すと読み直します</p>
   {/if}
 </div>
 

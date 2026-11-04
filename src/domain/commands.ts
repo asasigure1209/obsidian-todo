@@ -13,6 +13,7 @@ import {
   serializeDocument,
   type TodoBlock,
   type TodoLine,
+  todoBlocks,
   type WorkEntry,
   type WorkKind,
 } from "@/domain/document";
@@ -130,10 +131,6 @@ export function removeWork(doc: DayDocument, card: LineRef, entry: LineRef): Com
       ? { ...block, children: block.children.filter((child) => child !== current) }
       : STALE;
   });
-}
-
-function todoBlocks(segments: Segment[]): TodoBlock[] {
-  return segments.filter((segment): segment is TodoBlock => segment.kind === "todo");
 }
 
 function findCard(doc: DayDocument, card: LineRef): TodoBlock | undefined {
