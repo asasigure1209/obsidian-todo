@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { recordableMinutes } from "@/domain/minutes";
 
@@ -19,5 +20,16 @@ describe("recordableMinutes", () => {
 
   it("時計が戻っても負にならない", () => {
     expect(recordableMinutes(start, at(-3))).toBe(0);
+  });
+
+  it("どんな開始・終了時刻でも、0〜25の整数になる", () => {
+    fc.assert(
+      fc.property(fc.integer(), fc.integer(), (startedAt, now) => {
+        const minutes = recordableMinutes(startedAt, now);
+        expect(Number.isInteger(minutes)).toBe(true);
+        expect(minutes).toBeGreaterThanOrEqual(0);
+        expect(minutes).toBeLessThanOrEqual(25);
+      }),
+    );
   });
 });

@@ -22,6 +22,7 @@ pnpm test                                    # Vitest
 pnpm vitest run tests/domain/minutes.test.ts # 1ファイルだけ
 pnpm vitest run -t "分未満を切り捨てる"        # テスト名で絞る
 pnpm coverage                                # src/domain/ に 90% の下限
+pnpm mutation                                # Stryker（src/domain/、下限 80%、CI では回さない）
 pnpm verify                                  # CI と同じ全項目
 ```
 
@@ -42,6 +43,18 @@ pnpm verify                                  # CI と同じ全項目
 - 層をまたぐ import は必ず `@/層名/...` で書く。`../` は禁止（相対パスだと境界の検査をすり抜ける）。同じフォルダ内は `./`
 - `domain/` は `obsidian` も `svelte` も import しない。現在時刻なども引数か、`domain/` に置いた型（例：`domain/clock.ts` の `Clock`）経由で受け取る
 - 「`domain/` からは型だけ import してよい」は Biome で区別できないので、手で守る
+
+## テスト駆動開発（TDD）
+
+`docs/test-strategy.md` に従い、TDD のサイクルは Claude が自律で回す（本人はコミットや PR でテストを読む）。
+
+- 機能に取りかかる前に、確かめる振る舞いを `it.todo("…")` でテストファイルに並べる（これが TODO リスト）
+- Red：1つ選んで失敗するテストにし、対象だけ実行して**想定どおりの理由で**落ちることを確かめる。失敗するテストなしにプロダクトコードを書かない
+- Green：仮実装 → 三角測量 → 明白な実装で、歩幅を調整して通す
+- Refactor：通ったまま整え、認知複雑度 5 以内に収める。コミットは `pnpm verify` が通った時点
+- テストは `tests/<層>/` に置き、名前は design.md の言葉で日本語にする。モックライブラリは使わず、`domain/` の型を実装した手書きの偽物を使う
+- 読み書き・コマンド・複製では fast-check で性質（読んで戻すと元と一致、固定行が失われない など）も確かめる。機能を書き終えたら `pnpm mutation` で生き残った変異を確認する
+- 仕様の解釈に迷ったら design.md を確かめ、決まっていなければ本人に聞く
 
 ## 品質ルールで気をつけること
 

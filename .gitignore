@@ -8,3 +8,5 @@ dev-vault/.obsidian/*
 !dev-vault/.obsidian/plugins/
 dev-vault/.obsidian/plugins/*
 !dev-vault/.obsidian/plugins/daily-kanban-todo
+reports/
+.stryker-tmp/
