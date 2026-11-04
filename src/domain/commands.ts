@@ -1,7 +1,6 @@
 import {
   childIndent,
   type DayDocument,
-  documentLines,
   type Estimate,
   formatTodoLine,
   formatWorkEntry,
@@ -18,14 +17,8 @@ import {
   type WorkKind,
 } from "@/domain/document";
 
-/** 操作の対象のカード。n 番目の TODO ブロックと、その TODO 行の文字列（AD-5） */
-export interface CardRef {
-  index: number;
-  text: string;
-}
-
-/** 操作の対象の作業時間。カードの中で n 番目の作業時間の行と、その行の文字列 */
-export interface EntryRef {
+/** 操作の対象の行。n 番目の TODO ブロック（またはカードの中で n 番目の作業時間の行）と、その行の文字列（AD-5） */
+export interface LineRef {
   index: number;
   text: string;
 }
@@ -36,90 +29,106 @@ export interface WorkInput {
   memo?: string;
 }
 
-/** 1回の操作。対象が見つからない・入力が書式にならないときは undefined（何もしない） */
-export type DocumentCommand = (doc: DayDocument) => DayDocument | undefined;
+/**
+ * 何もしなかった理由。
+ * - stale：対象の位置と行の文字列が最新の本文と一致しない（読み直して再表示する）
+ * - invalid：入力が書式にならない（空の名前、0分など）
+ * - unstable：書き戻して読み直すと区切りが変わる（先頭に来た `---` が frontmatter になる、など）
+ */
+export interface Rejection {
+  rejected: "stale" | "invalid" | "unstable";
+}
 
-const DEFAULT_EOL = "\n";
+export type CommandResult = DayDocument | Rejection;
+
+/** 1回の操作 */
+export type DocumentCommand = (doc: DayDocument) => CommandResult;
+
+const STALE: Rejection = { rejected: "stale" };
+const INVALID: Rejection = { rejected: "invalid" };
+const UNSTABLE: Rejection = { rejected: "unstable" };
 const COLUMN_END = Number.POSITIVE_INFINITY;
 
-/** `vault.process` に渡す形。何もしないときは undefined */
-export function applyToBody(body: string, command: DocumentCommand): string | undefined {
+export function isRejection<T extends object>(result: T | Rejection): result is Rejection {
+  return "rejected" in result;
+}
+
+/** `vault.process` に渡す形。読み直すと区切りが変わる結果は書き込まない（AD-5 と同じく、ずれたら何もしない） */
+export function applyToBody(body: string, command: DocumentCommand): string | Rejection {
   const next = command(parseDocument(body));
-  return next ? serializeDocument(next) : undefined;
+  if (isRejection(next)) {
+    return next;
+  }
+  const written = serializeDocument(next);
+  return layoutOf(parseDocument(written)) === layoutOf(next) ? written : UNSTABLE;
 }
 
 /** 今日やるのいちばん下に追加する（M4） */
-export function addTodo(
-  doc: DayDocument,
-  name: string,
-  estimate?: Estimate,
-): DayDocument | undefined {
+export function addTodo(doc: DayDocument, name: string, estimate?: Estimate): CommandResult {
   const todo: TodoLine = { status: "todo", name: singleLine(name), ...(estimate && { estimate }) };
   const text = formatTodoLine(todo);
   if (parseTodoLine(text)?.name !== todo.name) {
-    return undefined;
+    return INVALID;
   }
-  const block: TodoBlock = { kind: "todo", head: { text, eol: "" }, children: [] };
-  return settle(doc, insertIntoColumn(doc.segments, block, "todo", COLUMN_END));
+  const block: TodoBlock = { kind: "todo", todo, head: { text, eol: "" }, children: [] };
+  return { ...doc, segments: insertIntoColumn(doc.segments, block, "todo", COLUMN_END) };
 }
 
-/** カードを列の中の位置へ動かす。着手中へ動かすと、前の着手中は今日やるの先頭へ戻す（design 8.1） */
+/** カードを列の中の位置へ動かす。着手中へ動かすときは位置を使わない（startCard） */
 export function moveCard(
   doc: DayDocument,
-  card: CardRef,
+  card: LineRef,
   status: Status,
   position: number,
-): DayDocument | undefined {
+): CommandResult {
   const target = findCard(doc, card);
   if (!target) {
-    return undefined;
+    return STALE;
+  }
+  if (status === "doing") {
+    return startCard(doc, target);
   }
   const rest = doc.segments.filter((segment) => segment !== target);
-  const segments = status === "doing" ? demoteDoing(rest) : rest;
-  return settle(doc, insertIntoColumn(segments, withStatus(target, status), status, position));
+  return { ...doc, segments: insertIntoColumn(rest, withStatus(target, status), status, position) };
 }
 
 /** 「完了にする」ボタン。完了の末尾に入れる（design 8.6） */
-export function completeCard(doc: DayDocument, card: CardRef): DayDocument | undefined {
+export function completeCard(doc: DayDocument, card: LineRef): CommandResult {
   return moveCard(doc, card, "done", COLUMN_END);
 }
 
 /** 作業時間をカードの最後の子の行として足す */
-export function addWork(doc: DayDocument, card: CardRef, work: WorkInput): DayDocument | undefined {
+export function addWork(doc: DayDocument, card: LineRef, work: WorkInput): CommandResult {
   return updateBlock(doc, card, (block) => {
-    const line = workLine(childIndent(block), work, "");
-    return line && { ...block, children: [...block.children, line] };
+    const line = workLine(childIndent(block), work);
+    return line ? { ...block, children: [...block.children, line] } : INVALID;
   });
 }
 
-/** 作業時間を書き換える（M2）。手で直した記録なので種類は手動になる */
+/** 作業時間を書き換える（M2）。手で直した記録なので種類は手動になる。メモを省くと元のメモを残し、空文字で消す */
 export function updateWork(
   doc: DayDocument,
-  card: CardRef,
-  entry: EntryRef,
+  card: LineRef,
+  entry: LineRef,
   work: Omit<WorkInput, "kind">,
-): DayDocument | undefined {
+): CommandResult {
   return updateBlock(doc, card, (block) => {
     const current = findEntry(block, entry);
-    const line = current && rewriteEntry(current, work);
-    return (
-      line && {
-        ...block,
-        children: block.children.map((child) => (child === current ? line : child)),
-      }
-    );
+    if (!current) {
+      return STALE;
+    }
+    const line = rewriteEntry(current, work);
+    return line ? replaceChild(block, current, line) : INVALID;
   });
 }
 
 /** 作業時間を削除する（M2）。書式外の子の行は残す */
-export function removeWork(
-  doc: DayDocument,
-  card: CardRef,
-  entry: EntryRef,
-): DayDocument | undefined {
+export function removeWork(doc: DayDocument, card: LineRef, entry: LineRef): CommandResult {
   return updateBlock(doc, card, (block) => {
     const current = findEntry(block, entry);
-    return current && { ...block, children: block.children.filter((child) => child !== current) };
+    return current
+      ? { ...block, children: block.children.filter((child) => child !== current) }
+      : STALE;
   });
 }
 
@@ -127,44 +136,50 @@ function todoBlocks(segments: Segment[]): TodoBlock[] {
   return segments.filter((segment): segment is TodoBlock => segment.kind === "todo");
 }
 
-function findCard(doc: DayDocument, card: CardRef): TodoBlock | undefined {
+function findCard(doc: DayDocument, card: LineRef): TodoBlock | undefined {
   const block = todoBlocks(doc.segments)[card.index];
   return block?.head.text === card.text ? block : undefined;
 }
 
-function findEntry(block: TodoBlock, entry: EntryRef): Line | undefined {
+function findEntry(block: TodoBlock, entry: LineRef): Line | undefined {
   const line = block.children.filter((child) => parseWorkEntry(child.text))[entry.index];
   return line?.text === entry.text ? line : undefined;
 }
 
 function updateBlock(
   doc: DayDocument,
-  card: CardRef,
-  update: (block: TodoBlock) => TodoBlock | undefined,
-): DayDocument | undefined {
+  card: LineRef,
+  update: (block: TodoBlock) => TodoBlock | Rejection,
+): CommandResult {
   const target = findCard(doc, card);
-  const next = target && update(target);
-  return (
-    next &&
-    settle(
-      doc,
-      doc.segments.map((segment) => (segment === target ? next : segment)),
-    )
-  );
+  const next = target ? update(target) : STALE;
+  return isRejection(next)
+    ? next
+    : { ...doc, segments: doc.segments.map((segment) => (segment === target ? next : segment)) };
 }
 
-function statusOf(block: TodoBlock): Status {
-  return (parseTodoLine(block.head.text) as TodoLine).status;
+function replaceChild(block: TodoBlock, current: Line, line: Line): TodoBlock {
+  return { ...block, children: block.children.map((child) => (child === current ? line : child)) };
 }
 
 function withStatus(block: TodoBlock, status: Status): TodoBlock {
-  const todo = parseTodoLine(block.head.text) as TodoLine;
-  return { ...block, head: { ...block.head, text: formatTodoLine({ ...todo, status }) } };
+  const todo = { ...block.todo, status };
+  return { ...block, todo, head: { ...block.head, text: formatTodoLine(todo) } };
 }
 
-function demoteDoing(segments: Segment[]): Segment[] {
-  const doing = todoBlocks(segments).filter((block) => statusOf(block) === "doing");
-  return doing.reduce(
+/** 着手中へ動かす。カードは元の位置のまま記号だけ変え、前の着手中は今日やるの先頭へ戻す（design 8.1・8.6） */
+function startCard(doc: DayDocument, target: TodoBlock): DayDocument {
+  const started = withStatus(target, "doing");
+  const segments = doc.segments.map((segment) => (segment === target ? started : segment));
+  const previous = todoBlocks(segments).filter(
+    (block) => block !== started && block.todo.status === "doing",
+  );
+  return { ...doc, segments: returnToTodo(segments, previous) };
+}
+
+/** 今日やるの先頭へ戻す。後ろのカードから先頭に入れて、元の順番を保つ */
+function returnToTodo(segments: Segment[], blocks: TodoBlock[]): Segment[] {
+  return blocks.reduceRight(
     (acc, block) =>
       insertIntoColumn(
         acc.filter((segment) => segment !== block),
@@ -183,7 +198,7 @@ function insertIntoColumn(
   status: Status,
   position: number,
 ): Segment[] {
-  const column = todoBlocks(segments).filter((other) => statusOf(other) === status);
+  const column = todoBlocks(segments).filter((other) => other.todo.status === status);
   const before = column[Math.max(0, position)];
   const at = before ? segments.indexOf(before) : endOfColumn(segments, column);
   return [...segments.slice(0, at), block, ...segments.slice(at)];
@@ -195,7 +210,8 @@ function endOfColumn(segments: Segment[], column: TodoBlock[]): number {
   return last ? segments.indexOf(last) + 1 : segments.length;
 }
 
-function workLine(indent: string, work: WorkInput, eol: string): Line | undefined {
+/** 改行は書き戻しで決める（serializeDocument） */
+function workLine(indent: string, work: WorkInput): Line | undefined {
   const memo = singleLine(work.memo ?? "");
   const text = formatWorkEntry({
     indent,
@@ -203,56 +219,32 @@ function workLine(indent: string, work: WorkInput, eol: string): Line | undefine
     kind: work.kind,
     ...(memo && { memo }),
   });
-  return parseWorkEntry(text) ? { text, eol } : undefined;
+  return parseWorkEntry(text) ? { text, eol: "" } : undefined;
 }
 
 /** 字下げと改行はそのままに、分数とメモを書き換える */
 function rewriteEntry(line: Line, work: Omit<WorkInput, "kind">): Line | undefined {
-  const { indent } = parseWorkEntry(line.text) as WorkEntry;
-  return workLine(indent, { ...work, kind: "手動" }, line.eol);
+  const { indent, memo } = parseWorkEntry(line.text) as WorkEntry;
+  const kept = memo === undefined ? {} : { memo };
+  const next = workLine(indent, { ...kept, ...work, kind: "手動" });
+  return next && { ...next, eol: line.eol };
 }
 
 function singleLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-/** 本文の途中に改行のない行を残さない。末尾に改行がなかった本文は、末尾に改行を付けない（AD-3） */
-function settle(original: DayDocument, segments: Segment[]): DayDocument | undefined {
-  const lines = documentLines(original);
-  const eol = lines.find((line) => line.eol !== "")?.eol ?? DEFAULT_EOL;
-  const next = { frontmatter: original.frontmatter, segments };
-  const last = documentLines(next).at(-1);
-  // 空行から改行を外すと行そのものが消えるので、末尾に改行を付けないのは文字のある行だけ
-  const stripLast = lines.at(-1)?.eol === "" && last?.text !== "";
-  const settled = mapLines(next, (line) => settleLine(line, line === last && stripLast ? "" : eol));
-  return rereadsSame(settled) ? settled : undefined;
-}
-
 /**
- * 書き戻して読み直しても同じ区切りになるか。`---` が先頭に来て frontmatter になるなど、
- * 区切りが変わる結果は書き込まない（AD-5 と同じく、ずれたら何もしない）
+ * frontmatter と区切りごとの行の文字列。キーの順番に左右されないよう配列だけで表す。
+ * TODO 行の文字列は必ず TODO ブロックとして読まれるので、区切りの種類は持たなくてよい
  */
-function rereadsSame(doc: DayDocument): boolean {
-  return JSON.stringify(parseDocument(serializeDocument(doc))) === JSON.stringify(doc);
-}
-
-function settleLine(line: Line, eol: string): Line {
-  const wanted = eol === "" ? "" : line.eol || eolAfter(line.text, eol);
-  return wanted === line.eol ? line : { ...line, eol: wanted };
-}
-
-/** 行末の `\r` に `\n` を続けると CRLF と読まれて `\r` が消えるので、そのときは `\r\n` を付ける */
-function eolAfter(text: string, eol: string): string {
-  return text.endsWith("\r") ? "\r\n" : eol;
-}
-
-function mapLines(doc: DayDocument, map: (line: Line) => Line): DayDocument {
-  return {
-    frontmatter: doc.frontmatter.map(map),
-    segments: doc.segments.map((segment) =>
+function layoutOf(doc: DayDocument): string {
+  return JSON.stringify([
+    doc.frontmatter.map((line) => line.text),
+    doc.segments.map((segment) =>
       segment.kind === "todo"
-        ? { ...segment, head: map(segment.head), children: segment.children.map(map) }
-        : { ...segment, line: map(segment.line) },
+        ? [segment.head, ...segment.children].map((line) => line.text)
+        : [segment.line.text],
     ),
-  };
+  ]);
 }

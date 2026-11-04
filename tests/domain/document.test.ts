@@ -28,7 +28,7 @@ describe("parseDocument / serializeDocument", () => {
   it("空の本文を読んで書き戻すと空のまま", () => {
     const doc = parseDocument("");
 
-    expect(doc).toEqual({ frontmatter: [], segments: [] });
+    expect(doc).toEqual({ frontmatter: [], segments: [], eol: "\n", endsWithEol: true });
     expect(serializeDocument(doc)).toBe("");
   });
 
@@ -109,6 +109,31 @@ date: 2026-11-04
     expect(doc.frontmatter[0]).toEqual({ text: "---", eol: "\r\n" });
     expect(doc.segments[0]).toMatchObject({ children: [{ text: "    - 5分 手動", eol: "" }] });
     expect(serializeDocument(doc)).toBe(body);
+  });
+
+  it("改行が空の行は、本文で最初に使われている改行を付けて書き戻す", () => {
+    const doc = parseDocument("---\r\n---\r\n- [ ] a");
+    const added = { kind: "fixed" as const, line: { text: "メモ", eol: "" } };
+
+    expect(serializeDocument({ ...doc, segments: [added, ...doc.segments] })).toBe(
+      "---\r\n---\r\nメモ\r\n- [ ] a",
+    );
+  });
+
+  it("末尾に改行がない本文でも、最後の行が空行なら改行を付ける", () => {
+    const doc = parseDocument("- [ ] a\n\n- [ ] b");
+    const [a, blank] = doc.segments;
+
+    expect(serializeDocument({ ...doc, segments: [a, blank] as Segment[] })).toBe("- [ ] a\n\n");
+  });
+
+  it("行末に \\r だけがある行を途中に置くと、\\r を行の文字として残す", () => {
+    const doc = parseDocument("- [ ] a\nメモ\r");
+    const [a, memo] = doc.segments;
+
+    expect(serializeDocument({ ...doc, segments: [memo, a] as Segment[] })).toBe(
+      "メモ\r\r\n- [ ] a",
+    );
   });
 
   it("どんな本文でも、読んでそのまま書き戻すと元と完全に一致する", () => {
