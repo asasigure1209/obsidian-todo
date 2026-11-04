@@ -12,7 +12,7 @@ import {
   removeWork,
   updateWork,
 } from "@/domain/commands";
-import { type DayDocument, parseDocument, type Status, type TodoBlock } from "@/domain/document";
+import { type DayDocument, parseDocument, type Status, todoBlocks } from "@/domain/document";
 import { markdownLike } from "./arbitraries";
 
 const run = (body: string, command: DocumentCommand) => applyToBody(body, command);
@@ -313,7 +313,7 @@ describe("コマンドの性質", () => {
   /** 本文と、その中の TODO ブロックを1つ指す LineRef */
   const withCard = (bodies: fc.Arbitrary<string>) =>
     bodies
-      .map((body) => ({ body, blocks: todoBlocksOf(parseDocument(body)) }))
+      .map((body) => ({ body, blocks: todoBlocks(parseDocument(body).segments) }))
       .filter(({ blocks }) => blocks.length > 0)
       .chain(({ body, blocks }) =>
         fc
@@ -346,7 +346,7 @@ describe("コマンドの性質", () => {
         const after = moved(body, ref, to, at);
 
         expect(fixedTexts(after)).toEqual(fixedTexts(before));
-        expect(todoBlocksOf(after)).toHaveLength(todoBlocksOf(before).length);
+        expect(todoBlocks(after.segments)).toHaveLength(todoBlocks(before.segments).length);
       }),
     );
   });
@@ -364,7 +364,7 @@ describe("コマンドの性質", () => {
   it("着手中へ動かした後、着手中はちょうど1件", () => {
     fc.assert(
       fc.property(bodyWithCard, position, ({ body, ref }, at) => {
-        const doing = todoBlocksOf(moved(body, ref, "doing", at)).filter((b) =>
+        const doing = todoBlocks(moved(body, ref, "doing", at).segments).filter((b) =>
           b.head.text.startsWith("- [/]"),
         );
 
@@ -381,7 +381,9 @@ describe("コマンドの性質", () => {
         fc.pre(!isRejection(after));
 
         expect(fixedTexts(after as DayDocument)).toEqual(fixedTexts(before));
-        expect(todoBlocksOf(after as DayDocument)).toHaveLength(todoBlocksOf(before).length + 1);
+        expect(todoBlocks((after as DayDocument).segments)).toHaveLength(
+          todoBlocks(before.segments).length + 1,
+        );
       }),
     );
   });
@@ -410,17 +412,13 @@ describe("コマンドの性質", () => {
   });
 });
 
-function todoBlocksOf(doc: DayDocument): TodoBlock[] {
-  return doc.segments.filter((s): s is TodoBlock => s.kind === "todo");
-}
-
 function fixedTexts(doc: DayDocument): string[] {
   return doc.segments.flatMap((s) => (s.kind === "fixed" ? [s.line.text] : []));
 }
 
 /** カードの名前ごとの子の行。カードの並びに依存しないよう並べ替えて比べる */
 function childrenByCard(doc: DayDocument): string[] {
-  return todoBlocksOf(doc)
+  return todoBlocks(doc.segments)
     .map((b) => JSON.stringify([b.head.text.slice(6), b.children.map((c) => c.text)]))
     .sort();
 }

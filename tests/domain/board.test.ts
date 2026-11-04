@@ -2,7 +2,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Board, toBoard } from "@/domain/board";
 import { isRejection, moveCard } from "@/domain/commands";
-import { parseDocument } from "@/domain/document";
+import { parseDocument, todoBlocks } from "@/domain/document";
 import { markdownLike } from "./arbitraries";
 
 const board = `---
@@ -97,7 +97,7 @@ describe("toBoard", () => {
     fc.assert(
       fc.property(markdownLike, (body) => {
         const doc = parseDocument(body);
-        const blocks = doc.segments.filter((s) => s.kind === "todo");
+        const blocks = todoBlocks(doc.segments);
 
         expect(allCards(toBoard(doc))).toHaveLength(blocks.length);
       }),

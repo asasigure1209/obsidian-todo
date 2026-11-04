@@ -31,12 +31,13 @@ export function watchBoard(
   return {
     subscribe(run) {
       let latest = 0;
-      let last = LOADING;
+      let loaded = false;
+      let stopped = false;
       const load = async () => {
         const current = ++latest;
-        const next = await nextState(files, dayKey, last);
-        if (next && current === latest) {
-          last = next;
+        const next = await nextState(files, dayKey, loaded);
+        if (next && !stopped && current === latest) {
+          loaded = true;
           run(next);
         }
       };
@@ -47,27 +48,38 @@ export function watchBoard(
       const stopListening = files.onChange(dayKey, reload);
       reload();
       return () => {
-        latest = Number.NaN;
+        stopped = true;
         stopListening();
       };
     },
   };
 }
 
-/** 読めなかったとき、まだ何も読めていなければ読めなかったことを、読めていれば undefined（前の状態のまま）を返す */
+/**
+ * 読めなかったときは、まだ何も読めていなければ読めなかったことを、読めていれば undefined（前の状態のまま）を返す。
+ * 本文の解釈で起きた例外は読めなかったことにせず、呼び出し元の onError へ渡す
+ */
 async function nextState(
   files: DayFiles,
   dayKey: string,
-  last: BoardState,
+  loaded: boolean,
 ): Promise<BoardState | undefined> {
-  return (await readState(files, dayKey)) ?? (last === LOADING ? UNREADABLE : undefined);
+  const read = await tryRead(files, dayKey);
+  if (!read) {
+    return loaded ? undefined : UNREADABLE;
+  }
+  return read.body === undefined
+    ? MISSING
+    : { kind: "board", board: toBoard(parseDocument(read.body)) };
 }
 
-/** 読めなかったときは undefined にして、前の状態のまま次の変更を待つ */
-async function readState(files: DayFiles, dayKey: string): Promise<BoardState | undefined> {
+/** 読めなかったときは undefined */
+async function tryRead(
+  files: DayFiles,
+  dayKey: string,
+): Promise<{ body: string | undefined } | undefined> {
   try {
-    const body = await files.read(dayKey);
-    return body === undefined ? MISSING : { kind: "board", board: toBoard(parseDocument(body)) };
+    return { body: await files.read(dayKey) };
   } catch {
     return undefined;
   }

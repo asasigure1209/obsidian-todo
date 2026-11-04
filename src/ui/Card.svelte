@@ -5,16 +5,16 @@ import type { Status } from "@/domain/document";
 interface Props {
   card: Card;
   status: Status;
-  /** 今日やるの優先順（1から） */
-  number?: number | undefined;
+  /** 列の中の順番（1から）。今日やるでは優先順として出す */
+  position: number;
 }
 
-const { card, status, number }: Props = $props();
+const { card, status, position }: Props = $props();
 </script>
 
 <article class="card" class:done={status === "done"}>
-  {#if number !== undefined}
-    <span class="number">{number}</span>
+  {#if status === "todo"}
+    <span class="number">{position}</span>
   {/if}
   <div class="body">
     <p class="name">{card.name}</p>

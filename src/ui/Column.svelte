@@ -20,7 +20,7 @@ const { title, status, cards }: Props = $props();
   <ol class="cards">
     {#each cards as card, i (card.key)}
       <li>
-        <Card {card} {status} number={status === "todo" ? i + 1 : undefined} />
+        <Card {card} {status} position={i + 1} />
       </li>
     {/each}
   </ol>
