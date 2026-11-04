@@ -1,4 +1,7 @@
-/** 1行。改行コード（`\n`・`\r\n`、最後の行で改行がなければ空）を分けて持ち、書き戻しで元に戻せるようにする */
+/**
+ * 1行。改行コード（`\n`・`\r\n`）を分けて持ち、書き戻しで元に戻せるようにする。
+ * 空のときは書き戻しで決める（最後の行で改行がない、または追加した行）
+ */
 export interface Line {
   text: string;
   eol: string;
@@ -7,6 +10,8 @@ export interface Line {
 /** TODO 行と、それより深く字下げされた後続の行（作業時間・書式外のメモ） */
 export interface TodoBlock {
   kind: "todo";
+  /** head を読んだ結果 */
+  todo: TodoLine;
   head: Line;
   children: Line[];
 }
@@ -23,9 +28,14 @@ export type Segment = TodoBlock | FixedLine;
 export interface DayDocument {
   frontmatter: Line[];
   segments: Segment[];
+  /** 改行が空の行に付ける改行。本文で最初に使われている改行 */
+  eol: string;
+  /** 末尾に改行があるか。空の本文は true（追加した行に改行を付ける） */
+  endsWithEol: boolean;
 }
 
 const FRONTMATTER_FENCE = "---";
+const DEFAULT_EOL = "\n";
 const INDENTED = /^[ \t]+\S/;
 
 export type Status = "todo" | "doing" | "done";
@@ -66,12 +76,35 @@ export function parseDocument(body: string): DayDocument {
   return {
     frontmatter: lines.slice(0, frontmatterLength),
     segments: toSegments(lines.slice(frontmatterLength)),
+    eol: lines.find((line) => line.eol !== "")?.eol ?? DEFAULT_EOL,
+    endsWithEol: lines.at(-1)?.eol !== "",
   };
 }
 
 export function serializeDocument(doc: DayDocument): string {
-  const lines = [...doc.frontmatter, ...doc.segments.flatMap(segmentLines)];
-  return lines.map((line) => line.text + line.eol).join("");
+  const lines = documentLines(doc);
+  return lines.map((line, i) => line.text + eolOf(doc, line, i === lines.length - 1)).join("");
+}
+
+/**
+ * 書き戻す改行。本文の途中に改行のない行を残さない。末尾に改行がなかった本文は末尾に改行を付けない。
+ * ただし最後の行が空行なら、改行を外すと行そのものが消えるので付ける
+ */
+function eolOf(doc: DayDocument, line: Line, isLast: boolean): string {
+  if (isLast && !doc.endsWithEol && line.text !== "") {
+    return "";
+  }
+  return line.eol || eolAfter(line.text, doc.eol);
+}
+
+/** 行末の `\r` に `\n` を続けると CRLF と読まれて `\r` が消えるので、そのときは `\r\n` を付ける */
+function eolAfter(text: string, eol: string): string {
+  return text.endsWith("\r") ? "\r\n" : eol;
+}
+
+/** frontmatter から本文の末尾までの全行 */
+export function documentLines(doc: DayDocument): Line[] {
+  return [...doc.frontmatter, ...doc.segments.flatMap(segmentLines)];
 }
 
 function splitLines(body: string): Line[] {
@@ -106,9 +139,8 @@ function toSegments(lines: Line[]): Segment[] {
 }
 
 function toSegment(line: Line): Segment {
-  return parseTodoLine(line.text)
-    ? { kind: "todo", head: line, children: [] }
-    : { kind: "fixed", line };
+  const todo = parseTodoLine(line.text);
+  return todo ? { kind: "todo", todo, head: line, children: [] } : { kind: "fixed", line };
 }
 
 function segmentLines(segment: Segment): Line[] {
