@@ -1,4 +1,5 @@
 <script lang="ts">
+import type { BoardSession, RunningCard } from "@/app/board-service";
 import type { Card as CardModel } from "@/domain/board";
 import type { Status } from "@/domain/document";
 import Card from "./Card.svelte";
@@ -8,10 +9,12 @@ interface Props {
   title: string;
   status: Status;
   cards: CardModel[];
+  running: RunningCard | undefined;
+  session: BoardSession;
   onDrop: (drop: Drop) => void;
 }
 
-const { title, status, cards, onDrop }: Props = $props();
+const { title, status, cards, running, session, onDrop }: Props = $props();
 </script>
 
 <section class="column">
@@ -19,10 +22,19 @@ const { title, status, cards, onDrop }: Props = $props();
     {title}
     <span class="count">{cards.length}</span>
   </h3>
+  {#if status === "doing" && cards.length === 0}
+    <p class="hint">カードをここへ動かすとタイマーが始まります</p>
+  {/if}
   <ol class="cards" use:sortable={{ status, onDrop }}>
     {#each cards as card, i (card.key)}
       <li data-key={card.key}>
-        <Card {card} {status} position={i + 1} />
+        <Card
+          {card}
+          {status}
+          {session}
+          position={i + 1}
+          running={running?.key === card.key ? running : undefined}
+        />
       </li>
     {/each}
   </ol>
@@ -50,6 +62,12 @@ const { title, status, cards, onDrop }: Props = $props();
   color: var(--text-muted);
   font-size: var(--font-ui-small);
   font-weight: normal;
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
 }
 
 .cards {

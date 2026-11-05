@@ -16,8 +16,11 @@ export class FakeDayFiles implements DayFiles {
   failNextWrite = false;
   /** 始まった書き込みの数 */
   startedWrites = 0;
+  /** 読み込みの数 */
+  reads = 0;
 
   read(dayKey: string): Promise<string | undefined> {
+    this.reads++;
     if (this.failNextRead) {
       this.failNextRead = false;
       return Promise.reject(new Error("読めない"));

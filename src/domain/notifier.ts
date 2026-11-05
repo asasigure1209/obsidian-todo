@@ -2,3 +2,8 @@
 export interface Notifier {
   notify(message: string): void;
 }
+
+/** 25分の満了を知らせる短い音（design 8.1）。実体は adapters/notifier.ts */
+export interface Alarm {
+  ring(): void;
+}

@@ -25,6 +25,9 @@ export const sortable: Action<HTMLElement, Options> = (node, initial) => {
   const instance = Sortable.create(node, {
     group: "board",
     animation: 150,
+    // カードの中のボタンを押してもドラッグを始めず、クリックはそのまま通す
+    filter: "button",
+    preventOnFilter: false,
     onStart(event) {
       origin = { parent: event.from, next: event.item.nextSibling };
     },

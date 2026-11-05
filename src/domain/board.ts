@@ -6,6 +6,7 @@ import {
   type Status,
   type TodoBlock,
   todoBlocks,
+  type WorkEntry,
 } from "@/domain/document";
 
 /** ボードに出す1件。ref はそのままコマンドに渡せる（AD-5） */
@@ -17,6 +18,8 @@ export interface Card {
   estimate?: Estimate;
   /** 実績。作業時間の子の行の分数の合計（design 7.6） */
   workedMinutes: number;
+  /** 種類がポモドーロの作業時間の行の数。着手中には「この数＋1」個目と出す */
+  pomodoros: number;
 }
 
 /** 3列のボード。列の中の順番は Markdown の行の順番（design 7.2） */
@@ -37,15 +40,17 @@ export function toBoard(doc: DayDocument): Board {
 
 function toCard(block: TodoBlock, index: number, key: string): Card {
   const { name, estimate } = block.todo;
+  const entries = workEntries(block);
   return {
     ref: { index, text: block.head.text },
     key,
     name,
     ...(estimate && { estimate }),
-    workedMinutes: workedMinutes(block),
+    workedMinutes: entries.reduce((sum, entry) => sum + entry.minutes, 0),
+    pomodoros: entries.filter((entry) => entry.kind === "ポモドーロ").length,
   };
 }
 
-function workedMinutes(block: TodoBlock): number {
-  return block.children.reduce((sum, child) => sum + (parseWorkEntry(child.text)?.minutes ?? 0), 0);
+function workEntries(block: TodoBlock): WorkEntry[] {
+  return block.children.flatMap((child) => parseWorkEntry(child.text) ?? []);
 }
