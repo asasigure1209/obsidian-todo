@@ -1,7 +1,9 @@
+import { LatestReader, type ReadResult } from "@/app/board/reader";
+import { BoardWriter } from "@/app/board/writer";
 import type { DayEditor } from "@/app/day-editor";
 import { PAST_DAY_MESSAGE } from "@/app/messages";
 import { type Readable, Store } from "@/app/store";
-import { type Board, type RunningCard, runningCard, toBoard } from "@/domain/board";
+import { type BoardView, toBoardView } from "@/domain/board";
 import type { Clock } from "@/domain/clock";
 import { isRejection, type LineRef } from "@/domain/commands/command";
 import { editWork, type WorkEdits } from "@/domain/commands/work";
@@ -10,13 +12,13 @@ import type { DayFiles } from "@/domain/day-files";
 import { type DayDocument, parseDocument } from "@/domain/document/body";
 import type { Status } from "@/domain/document/todo-line";
 import type { Notifier } from "@/domain/notifier";
-import { runningTarget, stepTimer, type TimerOp } from "@/domain/timer";
+import { stepTimer, type TimerOp } from "@/domain/timer";
 
 export type BoardState =
   | { kind: "loading" }
   | { kind: "missing" }
   | { kind: "unreadable" }
-  | { kind: "board"; board: Board; running?: RunningCard };
+  | ({ kind: "board" } & BoardView);
 
 /** 1日のボードの窓口。表示する状態と、ボードからの操作をまとめて持つ。操作は、書き込めたら true で終わる */
 export interface BoardSession extends Readable<BoardState> {
@@ -53,21 +55,18 @@ export function openBoard(deps: BoardDeps, dayKey: string): BoardSession {
 }
 
 /**
- * - ファイルが変わるたびに読み直して流す（AD-2）。読み込みは追い越されることがあるので、最後に始めた読み込みの結果だけを使う
+ * - ファイルが変わるたびに LatestReader で読み直して流す（AD-2）。閉じた後と書き込み中に読んだ結果は捨てる
  * - 読めなかったときは前の状態のまま次の変更を待つ。まだ何も読めていなければ、読めなかったことを流す
- * - 操作は、最後に読んだ本文に当てた結果をすぐに流してから（先読み）、DayEditor の並びに乗せて書き込む（AD-3）。
+ * - 操作は、最後に読んだ本文に当てた結果をすぐに流してから（先読み）、BoardWriter で書き込む（AD-3）。
  *   書き込みが終わるまでは読み直しの結果を捨て、書き込みのたびに読み直す
- * - 書き込みが断られたら、それより前に受けた操作は、断られた操作の先読みをもとにしているので書き込まずに捨てる
  */
 class Session implements BoardSession {
   private doc: DayDocument | undefined;
   private loaded = false;
   private closed = false;
-  private latest = 0;
-  private pendingWrites = 0;
-  /** 書き込みが断られるたびに進める。進む前に受けた操作は捨てる */
-  private epoch = 0;
   private readonly states: Store<BoardState>;
+  private readonly writer: BoardWriter;
+  private readonly reader: LatestReader;
   private readonly stopListening: () => void;
 
   constructor(
@@ -75,8 +74,16 @@ class Session implements BoardSession {
     private readonly dayKey: string,
   ) {
     this.states = new Store(LOADING, deps.onError);
-    this.stopListening = deps.files.onChange(dayKey, () => this.reload());
-    this.reload();
+    this.reader = new LatestReader(deps.files, dayKey, (read) => this.receive(read), deps.onError);
+    // 書き込み中の読み直しは receive が捨てるので、書き込みが終わるたびに読み直してよい
+    this.writer = new BoardWriter(
+      deps.editor,
+      dayKey,
+      () => this.reloadUnlessClosed(),
+      deps.onError,
+    );
+    this.stopListening = deps.files.onChange(dayKey, () => this.reader.reload());
+    this.reader.reload();
   }
 
   subscribe(run: (state: BoardState) => void): () => void {
@@ -95,6 +102,7 @@ class Session implements BoardSession {
     return this.edit("interrupt", { kind: "interrupt" });
   }
 
+  /** カードを着手中へ戻すので、移動と同じく過去の日にはできない */
   next(card: LineRef): Promise<boolean> {
     return this.edit("move", { kind: "next", card });
   }
@@ -117,28 +125,14 @@ class Session implements BoardSession {
       this.deps.notifier.notify(PAST_DAY_MESSAGE);
       return Promise.resolve(false);
     }
-    const epoch = this.epoch;
     this.preview(op);
-    this.pendingWrites++;
-    return this.deps.editor
-      .edit(this.dayKey, op, () => epoch === this.epoch)
-      .then((outcome) => {
-        this.afterWrite(outcome === "refused");
-        return outcome === "done";
-      })
-      .catch((error: unknown) => {
-        this.deps.onError(error);
-        return false;
-      });
+    return this.writer.write(op);
   }
 
-  /** 書き込みが残っているうちの読み直しは load が捨てるので、毎回読み直してよい */
-  private afterWrite(refused: boolean): void {
-    if (refused) {
-      this.epoch++;
+  private reloadUnlessClosed(): void {
+    if (!this.closed) {
+      this.reader.reload();
     }
-    this.pendingWrites--;
-    this.reload();
   }
 
   /**
@@ -151,25 +145,19 @@ class Session implements BoardSession {
       this.doc && stepTimer(this.deps.editor.current(), this.doc, this.dayKey, op, now).result;
     if (next && !isRejection(next)) {
       this.doc = next;
-      this.states.emit(this.toState(next));
+      this.states.emit(this.boardState(next));
     }
   }
 
-  private reload(): void {
-    this.load().catch(this.deps.onError);
-  }
-
-  private async load(): Promise<void> {
-    const current = ++this.latest;
-    const read = await tryRead(this.deps.files, this.dayKey);
-    const outdated = current !== this.latest || this.pendingWrites > 0;
-    if (!(this.closed || outdated)) {
+  /** 閉じた後と書き込み中に読んだ結果は捨てる */
+  private receive(read: ReadResult): void {
+    if (!(this.closed || this.writer.isWriting())) {
       this.applyRead(read);
     }
   }
 
   /** 本文の解釈で起きた例外は読めなかったことにせず、onError へ渡す */
-  private applyRead(read: { body: string | undefined } | undefined): void {
+  private applyRead(read: ReadResult): void {
     if (!read) {
       if (!this.loaded) {
         this.states.emit(UNREADABLE);
@@ -178,28 +166,11 @@ class Session implements BoardSession {
     }
     this.loaded = true;
     this.doc = read.body === undefined ? undefined : parseDocument(read.body);
-    this.states.emit(this.doc ? this.toState(this.doc) : MISSING);
+    this.states.emit(this.doc ? this.boardState(this.doc) : MISSING);
   }
 
-  /**
-   * 計測中のカードは、この日のタイマーの対象が見つかったときだけ示す。
-   * タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい
-   */
-  private toState(doc: DayDocument): BoardState {
-    const board = toBoard(doc);
-    const running = runningCard(board, runningTarget(this.deps.editor.current(), doc, this.dayKey));
-    return running ? { kind: "board", board, running } : { kind: "board", board };
-  }
-}
-
-/** 読めなかったときは undefined */
-async function tryRead(
-  files: DayFiles,
-  dayKey: string,
-): Promise<{ body: string | undefined } | undefined> {
-  try {
-    return { body: await files.read(dayKey) };
-  } catch {
-    return undefined;
+  /** タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい */
+  private boardState(doc: DayDocument): BoardState {
+    return { kind: "board", ...toBoardView(doc, this.deps.editor.current(), this.dayKey) };
   }
 }

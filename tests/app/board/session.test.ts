@@ -1,11 +1,18 @@
+import { FakeDayFiles, settle } from "@tests/app/fakes/day-files";
+import {
+  FakeAlarm,
+  FakeClock,
+  FakeTimerStore,
+  NINE,
+  runningTimer,
+  TODAY,
+} from "@tests/app/fakes/timer";
 import { describe, expect, it } from "vitest";
-import { type BoardSession, type BoardState, openBoard } from "@/app/board-service";
+import { type BoardSession, type BoardState, openBoard } from "@/app/board/session";
 import { DayEditor } from "@/app/day-editor";
 import type { LineRef } from "@/domain/commands/command";
 import type { WorkEdits } from "@/domain/commands/work";
 import type { Timer } from "@/domain/timer";
-import { FakeDayFiles, settle } from "./fakes/day-files";
-import { FakeAlarm, FakeClock, FakeTimerStore, NINE, runningTimer, TODAY } from "./fakes/timer";
 
 const today = TODAY;
 const yesterday = "2026-11-04";
@@ -230,6 +237,24 @@ describe("openBoard：読み直し", () => {
     await settle();
 
     expect(states).toEqual(["loading"]);
+  });
+
+  it("書き込みの途中で閉じたら、書き込みが終わっても読み直さない", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, "- [ ] a\n");
+    const { session } = open(files);
+    await settle();
+    files.holdWrites();
+    const moved = session.move(card(0, "- [ ] a"), "done", 0);
+    await settle();
+    session.close();
+    const reads = files.reads;
+
+    files.releaseWrite();
+    await moved;
+    await settle();
+
+    expect(files.reads).toBe(reads);
   });
 });
 

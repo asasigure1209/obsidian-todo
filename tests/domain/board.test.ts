@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Board, runningCard, toBoard } from "@/domain/board";
+import { type Board, runningCard, toBoard, toBoardView } from "@/domain/board";
 import { moveCard } from "@/domain/commands/card";
 import { isRejection, type LineRef } from "@/domain/commands/command";
 import { editWork } from "@/domain/commands/work";
@@ -202,5 +202,21 @@ describe("runningCard", () => {
   it("対象の位置に着手中のカードがなければ示さない", () => {
     const running = runningAt(0, "- [ ] API設計レビューの指摘に対応 [est:: 2]");
     expect(runningCard(boardOf(board), running)).toBeUndefined();
+  });
+});
+
+describe("toBoardView", () => {
+  const body = "- [ ] 議事録\n- [/] 提案資料\n";
+  const timer = { dayKey: "2026-11-05", startedAt: 0, text: "- [/] 提案資料", held: false };
+
+  it("この日のタイマーの対象が見つかれば、計測中のカードを示す", () => {
+    const view = toBoardView(parseDocument(body), timer, "2026-11-05");
+    expect(view.board.doing.map((c) => c.name)).toEqual(["提案資料"]);
+    expect(view.running).toEqual({ key: "- [/] 提案資料#0", startedAt: 0, count: 1 });
+  });
+
+  it("ほかの日のタイマーなら、計測中のカードを示さない", () => {
+    const view = toBoardView(parseDocument(body), timer, "2026-11-06");
+    expect(view).not.toHaveProperty("running");
   });
 });

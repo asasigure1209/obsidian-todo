@@ -1,6 +1,6 @@
 import { type App, ItemView, Modal, type WorkspaceLeaf } from "obsidian";
 import { mount, unmount } from "svelte";
-import { type BoardDeps, type BoardSession, openBoard } from "@/app/board-service";
+import { type BoardDeps, type BoardSession, openBoard } from "@/app/board/session";
 import type { Card } from "@/domain/board";
 import { toDayKey } from "@/domain/day";
 import Board from "./Board.svelte";

@@ -2,7 +2,7 @@ import type { LineRef } from "@/domain/commands/command";
 import { type DayDocument, type TodoBlock, todoBlocks } from "@/domain/document/body";
 import type { Estimate, Status } from "@/domain/document/todo-line";
 import { type WorkKind, workLines } from "@/domain/document/work-entry";
-import type { RunningTarget } from "@/domain/timer";
+import { type RunningTarget, runningTarget, type Timer } from "@/domain/timer";
 
 /** 作業時間の1件。ref はそのまま作業時間のコマンドに渡せる（カードの中で n 番目の作業時間の行） */
 export interface WorkRecord {
@@ -29,6 +29,12 @@ export interface Card {
 
 /** 3列のボード。列の中の順番は Markdown の行の順番（design 7.2） */
 export type Board = Record<Status, Card[]>;
+
+/** その日のボードと、計測中のカード */
+export interface BoardView {
+  board: Board;
+  running?: RunningCard;
+}
 
 /** 計測中のカード。key は Card.key、startedAt から残り時間を出す。count は何個目のポモドーロか */
 export interface RunningCard {
@@ -80,4 +86,11 @@ export function runningCard(
   return card && running
     ? { key: card.key, startedAt: running.timer.startedAt, count: card.pomodoros + 1 }
     : undefined;
+}
+
+/** 計測中のカードは、この日のタイマーの対象が見つかったときだけ示す */
+export function toBoardView(doc: DayDocument, timer: Timer, dayKey: string): BoardView {
+  const board = toBoard(doc);
+  const running = runningCard(board, runningTarget(timer, doc, dayKey));
+  return running ? { board, running } : { board };
 }

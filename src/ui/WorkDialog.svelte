@@ -1,6 +1,6 @@
 <script lang="ts">
 import { untrack } from "svelte";
-import type { BoardSession } from "@/app/board-service";
+import type { BoardSession } from "@/app/board/session";
 import type { Card } from "@/domain/board";
 import type { WorkKind } from "@/domain/document/work-entry";
 import { POMODORO_MINUTES, pomodoroEquivalent } from "@/domain/minutes";

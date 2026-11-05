@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { BoardSession } from "@/app/board-service";
+import type { BoardSession } from "@/app/board/session";
 import type { Card } from "@/domain/board";
 import Column from "./Column.svelte";
 import type { Drop } from "./sortable";
