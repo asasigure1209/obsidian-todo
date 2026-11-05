@@ -1,12 +1,19 @@
+import { FakeDayFiles, settle } from "@tests/app/fakes/day-files";
+import {
+  FakeAlarm,
+  FakeClock,
+  FakeTimerStore,
+  NINE,
+  runningTimer,
+  TODAY,
+} from "@tests/app/fakes/timer";
 import { describe, expect, it } from "vitest";
+import { type BoardSession, openBoard } from "@/app/board/session";
 import type { BoardState } from "@/app/board/state";
-import { type BoardSession, openBoard } from "@/app/board-service";
 import { DayEditor } from "@/app/day-editor";
 import type { LineRef } from "@/domain/commands/command";
 import type { WorkEdits } from "@/domain/commands/work";
 import type { Timer } from "@/domain/timer";
-import { FakeDayFiles, settle } from "./fakes/day-files";
-import { FakeAlarm, FakeClock, FakeTimerStore, NINE, runningTimer, TODAY } from "./fakes/timer";
 
 const today = TODAY;
 const yesterday = "2026-11-04";

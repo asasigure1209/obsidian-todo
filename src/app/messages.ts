@@ -1,7 +1,7 @@
 import type { Rejection } from "@/domain/commands/command";
 import { parseTodoLine } from "@/domain/document/todo-line";
 
-/** 利用者への知らせの文言。day-editor と board-service が使う */
+/** 利用者への知らせの文言。day-editor と board/session が使う */
 
 export const REJECTION_MESSAGES: Record<Rejection["rejected"], string> = {
   stale: "ファイルが変わっていたので、操作を取りやめて読み直しました",

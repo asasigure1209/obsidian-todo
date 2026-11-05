@@ -3,7 +3,7 @@ import { systemClock } from "@/adapters/clock";
 import { expiryAlarm, noticeNotifier } from "@/adapters/notifier";
 import { PluginTimerStore } from "@/adapters/timer-store";
 import { VaultDayFiles } from "@/adapters/vault";
-import type { BoardDeps } from "@/app/board-service";
+import type { BoardDeps } from "@/app/board/session";
 import { openDayEditor } from "@/app/day-editor";
 import { BOARD_ICON, BOARD_VIEW_TYPE, BoardView } from "@/ui/BoardView";
 
