@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { BoardSession, RunningCard } from "@/app/board-service";
 import type { Card as CardModel } from "@/domain/board";
-import type { Status } from "@/domain/document";
+import type { Status } from "@/domain/todo-line";
 import Card from "./Card.svelte";
 import { type Drop, sortable } from "./sortable";
 

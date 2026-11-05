@@ -180,7 +180,10 @@
 src/
   main.ts                 プラグインの入口。ビュー・コマンド・設定画面の登録
   domain/                 Obsidian に依存しない
-    document.ts           1日のファイルの読み書き（AD-4）
+    document.ts           1日のファイルの読み書き。frontmatter・TODO ブロック・固定行への区切り（AD-4）
+    todo-line.ts          TODO 行の書式（状態・名前・見積もり）
+    work-entry.ts         作業時間の行の書式と、カードの作業時間の行の取り出し
+    events.ts             frontmatter の events の項目の取り出し
     commands.ts           追加・並べ替え・状態の変更・時間の修正（本文 → 本文）
     timer.ts              タイマーの状態遷移と経過分の計算（AD-6）
     timer-store.ts        タイマーの状態の保存先の型（実体は adapters/timer-store.ts）

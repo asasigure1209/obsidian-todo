@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { editWork, isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
-import { parseDocument, parseWorkEntry, serializeDocument, todoBlocks } from "@/domain/document";
+import { parseDocument, serializeDocument, todoBlocks } from "@/domain/document";
 import {
   parseTimer,
   type RunningTimer,
@@ -10,6 +10,7 @@ import {
   type Timer,
   type TimerOp,
 } from "@/domain/timer";
+import { parseWorkEntry } from "@/domain/work-entry";
 import { markdownLike } from "./arbitraries";
 
 const day = "2026-11-05";

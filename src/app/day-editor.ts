@@ -1,7 +1,7 @@
 import type { Clock } from "@/domain/clock";
 import { applyToBody, isRejection, type Rejection } from "@/domain/commands";
 import type { DayFiles } from "@/domain/day-files";
-import { parseDocument, parseTodoLine } from "@/domain/document";
+import { parseDocument } from "@/domain/document";
 import type { Alarm, Notifier } from "@/domain/notifier";
 import {
   isDue,
@@ -13,6 +13,7 @@ import {
   type TimerStep,
 } from "@/domain/timer";
 import type { TimerStore } from "@/domain/timer-store";
+import { parseTodoLine } from "@/domain/todo-line";
 
 export interface EditorDeps {
   files: DayFiles;

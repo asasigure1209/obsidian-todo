@@ -2,7 +2,6 @@
 import { untrack } from "svelte";
 import type { BoardSession } from "@/app/board-service";
 import type { Card } from "@/domain/board";
-import type { WorkKind } from "@/domain/document";
 import { POMODORO_MINUTES, pomodoroEquivalent } from "@/domain/minutes";
 import {
   addMinutes,
@@ -16,6 +15,7 @@ import {
   setMinutes,
   toEdits,
 } from "@/domain/work-draft";
+import type { WorkKind } from "@/domain/work-entry";
 
 interface Props {
   /** 開いたときのカード。保存するまで、この時点の記録を下書きにする */
