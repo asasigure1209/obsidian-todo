@@ -1,7 +1,8 @@
 import type { Clock } from "@/domain/clock";
 import { applyToBody, isRejection, type Rejection } from "@/domain/commands";
 import type { DayFiles } from "@/domain/day-files";
-import { parseDocument, parseTodoLine } from "@/domain/document";
+import { parseDocument } from "@/domain/document/body";
+import { parseTodoLine } from "@/domain/document/todo-line";
 import type { Alarm, Notifier } from "@/domain/notifier";
 import {
   isDue,

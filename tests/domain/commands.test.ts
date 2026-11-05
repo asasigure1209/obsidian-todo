@@ -12,14 +12,10 @@ import {
   moveCard,
   type WorkEdits,
 } from "@/domain/commands";
-import {
-  type DayDocument,
-  parseDocument,
-  parseWorkEntry,
-  type Status,
-  todoBlocks,
-} from "@/domain/document";
-import { markdownLike } from "./arbitraries";
+import { type DayDocument, parseDocument, todoBlocks } from "@/domain/document/body";
+import type { Status } from "@/domain/document/todo-line";
+import { parseWorkEntry } from "@/domain/document/work-entry";
+import { markdownLike } from "./document/arbitraries";
 
 const run = (body: string, command: DocumentCommand) => applyToBody(body, command);
 

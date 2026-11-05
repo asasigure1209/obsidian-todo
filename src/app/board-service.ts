@@ -4,7 +4,8 @@ import type { Clock } from "@/domain/clock";
 import { editWork, isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
 import { canEdit, type EditKind, toDayKey } from "@/domain/day";
 import type { DayFiles } from "@/domain/day-files";
-import { type DayDocument, parseDocument, type Status } from "@/domain/document";
+import { type DayDocument, parseDocument } from "@/domain/document/body";
+import type { Status } from "@/domain/document/todo-line";
 import type { Notifier } from "@/domain/notifier";
 import { type RunningTarget, runningTarget, stepTimer, type TimerOp } from "@/domain/timer";
 

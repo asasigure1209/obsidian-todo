@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { BoardSession, RunningCard } from "@/app/board-service";
 import type { Card } from "@/domain/board";
-import type { Status } from "@/domain/document";
+import type { Status } from "@/domain/document/todo-line";
 import Timer from "./Timer.svelte";
 
 interface Props {

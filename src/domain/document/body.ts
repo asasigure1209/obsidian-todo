@@ -1,3 +1,5 @@
+import { parseTodoLine, type TodoLine } from "@/domain/document/todo-line";
+
 /**
  * 1行。改行コード（`\n`・`\r\n`）を分けて持ち、書き戻しで元に戻せるようにする。
  * 空のときは書き戻しで決める（最後の行で改行がない、または追加した行）
@@ -37,38 +39,6 @@ export interface DayDocument {
 const FRONTMATTER_FENCE = "---";
 const DEFAULT_EOL = "\n";
 const INDENTED = /^[ \t]+\S/;
-
-export type Status = "todo" | "doing" | "done";
-
-export type Estimate = "小" | "1" | "2" | "3" | "4";
-
-export interface TodoLine {
-  status: Status;
-  name: string;
-  estimate?: Estimate;
-}
-
-const STATUS_BY_MARK: Record<string, Status> = { " ": "todo", "/": "doing", x: "done" };
-const MARK_BY_STATUS: Record<Status, string> = { todo: " ", doing: "/", done: "x" };
-const TODO_LINE = /^- \[([ /x])\] (.*?)(?: \[est:: (小|[1-4])\])?$/;
-
-export function parseTodoLine(text: string): TodoLine | undefined {
-  const match = TODO_LINE.exec(text);
-  if (!match) {
-    return undefined;
-  }
-  const [, mark = "", name = "", estimate] = match;
-  if (name.trim() === "") {
-    return undefined;
-  }
-  const status = STATUS_BY_MARK[mark] as Status;
-  return estimate ? { status, name, estimate: estimate as Estimate } : { status, name };
-}
-
-export function formatTodoLine(todo: TodoLine): string {
-  const estimate = todo.estimate ? ` [est:: ${todo.estimate}]` : "";
-  return `- [${MARK_BY_STATUS[todo.status]}] ${todo.name}${estimate}`;
-}
 
 export function parseDocument(body: string): DayDocument {
   const lines = splitLines(body);
@@ -150,79 +120,4 @@ export function todoBlocks(segments: Segment[]): TodoBlock[] {
 
 function segmentLines(segment: Segment): Line[] {
   return segment.kind === "todo" ? [segment.head, ...segment.children] : [segment.line];
-}
-
-export type WorkKind = "ポモドーロ" | "中断" | "手動";
-
-/** 作業時間の子の行。字下げは書き戻しで元に戻すために持つ */
-export interface WorkEntry {
-  indent: string;
-  minutes: number;
-  kind: WorkKind;
-  memo?: string;
-}
-
-const WORK_ENTRY = /^([ \t]+)- ([1-9]\d*)分 (ポモドーロ|中断|手動)(?: (.*\S))?$/;
-const DEFAULT_CHILD_INDENT = "    ";
-const EVENTS_KEY = /^events:\s*$/;
-const LIST_ITEM = /^\s*- (.*)$/;
-const QUOTED = /^(["'])(.*)\1$/;
-
-export function parseWorkEntry(text: string): WorkEntry | undefined {
-  const match = WORK_ENTRY.exec(text);
-  if (!match) {
-    return undefined;
-  }
-  const [, indent = "", minutes = "", kind, memo] = match;
-  const entry: WorkEntry = { indent, minutes: Number(minutes), kind: kind as WorkKind };
-  return memo === undefined ? entry : { ...entry, memo };
-}
-
-export function formatWorkEntry(entry: WorkEntry): string {
-  const memo = entry.memo === undefined ? "" : ` ${entry.memo}`;
-  return `${entry.indent}- ${entry.minutes}分 ${entry.kind}${memo}`;
-}
-
-/** 作業時間の子の行と、その読み取り結果 */
-export interface WorkLine {
-  line: Line;
-  entry: WorkEntry;
-}
-
-/** カードの作業時間の行を本文の順番で。n 番目が作業時間の LineRef の index になる（AD-5）。書式外の子の行は数えない */
-export function workLines(block: TodoBlock): WorkLine[] {
-  return block.children.flatMap((line) => {
-    const entry = parseWorkEntry(line.text);
-    return entry ? [{ line, entry }] : [];
-  });
-}
-
-/** 作業時間の行に書ける分数か（1以上の整数。書式の `[1-9]\d*分` に当たる） */
-export function isWorkMinutes(minutes: number): boolean {
-  return Number.isInteger(minutes) && minutes >= 1;
-}
-
-/** 作業時間の行を書き足すときの字下げ。既存の子の行に合わせ、なければスペース4つ */
-export function childIndent(block: TodoBlock): string {
-  const indent = block.children[0]?.text.match(/^[ \t]+/)?.[0];
-  return indent ?? DEFAULT_CHILD_INDENT;
-}
-
-/** frontmatter の `events` の各項目。予定としての解釈は schedule.ts が行う */
-export function eventLines(doc: DayDocument): string[] {
-  // events がなければ start は -1 になり、先頭の `---` で読み終わる
-  const start = doc.frontmatter.findIndex((line) => EVENTS_KEY.test(line.text));
-  const items: string[] = [];
-  for (const line of doc.frontmatter.slice(start + 1)) {
-    const item = LIST_ITEM.exec(line.text)?.[1];
-    if (item === undefined) {
-      break;
-    }
-    items.push(unquote(item));
-  }
-  return items;
-}
-
-function unquote(value: string): string {
-  return QUOTED.exec(value)?.[2] ?? value;
 }

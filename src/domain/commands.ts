@@ -1,23 +1,27 @@
 import {
-  childIndent,
   type DayDocument,
-  type Estimate,
-  formatTodoLine,
-  formatWorkEntry,
   type Line,
   parseDocument,
-  parseTodoLine,
-  parseWorkEntry,
   type Segment,
-  type Status,
   serializeDocument,
   type TodoBlock,
-  type TodoLine,
   todoBlocks,
+} from "@/domain/document/body";
+import {
+  type Estimate,
+  formatTodoLine,
+  parseTodoLine,
+  type Status,
+  type TodoLine,
+} from "@/domain/document/todo-line";
+import {
+  childIndent,
+  formatWorkEntry,
+  parseWorkEntry,
   type WorkKind,
   type WorkLine,
   workLines,
-} from "@/domain/document";
+} from "@/domain/document/work-entry";
 
 /** 操作の対象の行。n 番目の TODO ブロック（またはカードの中で n 番目の作業時間の行）と、その行の文字列（AD-5） */
 export interface LineRef {

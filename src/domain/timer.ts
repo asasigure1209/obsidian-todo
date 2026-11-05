@@ -9,14 +9,9 @@ import {
   type Rejection,
   STALE,
 } from "@/domain/commands";
-import {
-  type DayDocument,
-  formatTodoLine,
-  parseTodoLine,
-  type Status,
-  todoBlocks,
-  type WorkKind,
-} from "@/domain/document";
+import { type DayDocument, todoBlocks } from "@/domain/document/body";
+import { formatTodoLine, parseTodoLine, type Status } from "@/domain/document/todo-line";
+import type { WorkKind } from "@/domain/document/work-entry";
 import { POMODORO_MS, recordableMinutes } from "@/domain/minutes";
 
 /** 計測中のタイマー（AD-6）。停止中は undefined */
