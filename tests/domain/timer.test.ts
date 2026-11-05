@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { editWork, isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
+import { isRejection, type LineRef } from "@/domain/commands/command";
+import { editWork, type WorkEdits } from "@/domain/commands/work";
 import { parseDocument, serializeDocument, todoBlocks } from "@/domain/document/body";
 import { parseWorkEntry } from "@/domain/document/work-entry";
 import {

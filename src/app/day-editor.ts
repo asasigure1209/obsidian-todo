@@ -1,5 +1,5 @@
 import type { Clock } from "@/domain/clock";
-import { applyToBody, isRejection, type Rejection } from "@/domain/commands";
+import { applyToBody, isRejection, type Rejection } from "@/domain/commands/command";
 import type { DayFiles } from "@/domain/day-files";
 import { parseDocument } from "@/domain/document/body";
 import { parseTodoLine } from "@/domain/document/todo-line";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DayEditor } from "@/app/day-editor";
-import type { LineRef } from "@/domain/commands";
+import type { LineRef } from "@/domain/commands/command";
 import type { RunningTimer, Timer } from "@/domain/timer";
 import { FakeDayFiles, settle } from "./fakes/day-files";
 import { FakeAlarm, FakeClock, FakeTimerStore, NINE, runningTimer, TODAY } from "./fakes/timer";

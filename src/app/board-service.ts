@@ -1,7 +1,8 @@
 import type { DayEditor } from "@/app/day-editor";
 import { type Board, toBoard } from "@/domain/board";
 import type { Clock } from "@/domain/clock";
-import { editWork, isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
+import { isRejection, type LineRef } from "@/domain/commands/command";
+import { editWork, type WorkEdits } from "@/domain/commands/work";
 import { canEdit, type EditKind, toDayKey } from "@/domain/day";
 import type { DayFiles } from "@/domain/day-files";
 import { type DayDocument, parseDocument } from "@/domain/document/body";

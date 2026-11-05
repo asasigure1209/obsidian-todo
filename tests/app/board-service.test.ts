@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { type BoardSession, type BoardState, openBoard } from "@/app/board-service";
 import { DayEditor } from "@/app/day-editor";
-import type { LineRef, WorkEdits } from "@/domain/commands";
+import type { LineRef } from "@/domain/commands/command";
+import type { WorkEdits } from "@/domain/commands/work";
 import type { Timer } from "@/domain/timer";
 import { FakeDayFiles, settle } from "./fakes/day-files";
 import { FakeAlarm, FakeClock, FakeTimerStore, NINE, runningTimer, TODAY } from "./fakes/timer";
