@@ -204,6 +204,7 @@ src/
     board/
       state.ts            ボードに流す状態（読み込み中・ファイルなし・読めない・ボード）と、本文からの組み立て
       operations.ts       ボードの操作ごとの、その日にできるかの区分とタイマーの遷移
+      writer.ts           書き込みを day-editor の並びに乗せる。断られたら、それより前に受けた操作を捨てる
     day-editor.ts         書き込みを1本に並べ、タイマーを保存してから vault.process で書き戻す。毎秒の満了の判定（AD-6）
     store.ts              状態を受け取り手へ流す部品（Svelte のストアと同じ形）
     messages.ts           利用者への知らせの文言

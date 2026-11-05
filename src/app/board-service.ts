@@ -1,5 +1,6 @@
 import { type BoardEdit, boardEdits } from "@/app/board/operations";
 import { type BoardState, boardState, LOADING, readState, UNREADABLE } from "@/app/board/state";
+import { BoardWriter } from "@/app/board/writer";
 import type { DayEditor } from "@/app/day-editor";
 import { PAST_DAY_MESSAGE } from "@/app/messages";
 import { type Readable, Store } from "@/app/store";
@@ -46,19 +47,17 @@ export function openBoard(deps: BoardDeps, dayKey: string): BoardSession {
 /**
  * - ファイルが変わるたびに読み直して流す（AD-2）。読み込みは追い越されることがあるので、最後に始めた読み込みの結果だけを使う
  * - 読めなかったときは前の状態のまま次の変更を待つ。まだ何も読めていなければ、読めなかったことを流す
- * - 操作は、最後に読んだ本文に当てた結果をすぐに流してから（先読み）、DayEditor の並びに乗せて書き込む（AD-3）。
+ * - 操作は、最後に読んだ本文に当てた結果をすぐに流してから（先読み）、BoardWriter で書き込む（AD-3）。
  *   書き込みが終わるまでは読み直しの結果を捨て、書き込みのたびに読み直す
- * - 書き込みが断られたら、それより前に受けた操作は、断られた操作の先読みをもとにしているので書き込まずに捨てる
  */
 class Session implements BoardSession {
   private doc: DayDocument | undefined;
   private loaded = false;
   private closed = false;
   private latest = 0;
-  private pendingWrites = 0;
-  /** 書き込みが断られるたびに進める。進む前に受けた操作は捨てる */
-  private epoch = 0;
   private readonly states: Store<BoardState>;
+  /** 書き込みが終わるたびに読み直す。書き込みが残っているうちの読み直しは load が捨てるので、毎回読み直してよい */
+  private readonly writer: BoardWriter;
   private readonly stopListening: () => void;
 
   constructor(
@@ -66,6 +65,7 @@ class Session implements BoardSession {
     private readonly dayKey: string,
   ) {
     this.states = new Store(LOADING, deps.onError);
+    this.writer = new BoardWriter(deps.editor, dayKey, () => this.reload(), deps.onError);
     this.stopListening = deps.files.onChange(dayKey, () => this.reload());
     this.reload();
   }
@@ -108,28 +108,8 @@ class Session implements BoardSession {
       this.deps.notifier.notify(PAST_DAY_MESSAGE);
       return Promise.resolve(false);
     }
-    const epoch = this.epoch;
     this.preview(op);
-    this.pendingWrites++;
-    return this.deps.editor
-      .edit(this.dayKey, op, () => epoch === this.epoch)
-      .then((outcome) => {
-        this.afterWrite(outcome === "refused");
-        return outcome === "done";
-      })
-      .catch((error: unknown) => {
-        this.deps.onError(error);
-        return false;
-      });
-  }
-
-  /** 書き込みが残っているうちの読み直しは load が捨てるので、毎回読み直してよい */
-  private afterWrite(refused: boolean): void {
-    if (refused) {
-      this.epoch++;
-    }
-    this.pendingWrites--;
-    this.reload();
+    return this.writer.write(op);
   }
 
   /**
@@ -153,7 +133,7 @@ class Session implements BoardSession {
   private async load(): Promise<void> {
     const current = ++this.latest;
     const read = await tryRead(this.deps.files, this.dayKey);
-    const outdated = current !== this.latest || this.pendingWrites > 0;
+    const outdated = current !== this.latest || this.writer.isWriting();
     if (!(this.closed || outdated)) {
       this.applyRead(read);
     }
