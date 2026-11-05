@@ -33,18 +33,24 @@ function setup(timer: Timer = undefined) {
   const notices: string[] = [];
   const errors: unknown[] = [];
   const alarms: string[] = [];
+  let prepares = 0;
   const editor = new DayEditor(
     {
       files,
       store,
       clock,
       notifier: { notify: (message) => notices.push(message) },
-      alarm: { ring: (message) => alarms.push(message) },
+      alarm: {
+        ring: (message) => alarms.push(message),
+        prepare: () => {
+          prepares++;
+        },
+      },
       onError: (error) => errors.push(error),
     },
     timer,
   );
-  return { files, clock, store, notices, errors, editor, alarms };
+  return { files, clock, store, notices, errors, editor, alarms, prepares: () => prepares };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -208,6 +214,53 @@ describe("DayEditor：操作", () => {
     expect(store.current()).toEqual(running());
   });
 
+  it("計測を始めたときに、満了を知らせる準備をする（OS の通知の許可を尋ねる）", async () => {
+    const { editor, prepares } = setup();
+
+    await editor.edit(today, { kind: "next", card: proposal });
+    await editor.edit(today, { kind: "move", card: review, status: "done", position: 0 });
+    await editor.edit(today, { kind: "interrupt" });
+
+    expect(prepares()).toBe(1);
+  });
+
+  it("ほかの日のタイマーの対象が見つからず中断を記録できなければ、捨てて知らせてから計測を始める", async () => {
+    const { files, editor, notices, store } = setup(running({ dayKey: yesterday }));
+    files.write(yesterday, body.replace("提案資料", "提案資料の構成"));
+
+    await editor.edit(today, { kind: "move", card: review, status: "doing", position: 0 });
+
+    expect(notices).toEqual([
+      "着手中のカードが見つからないため、計測を取りやめました（記録していません）",
+    ]);
+    expect(store.current()).toMatchObject({ dayKey: today, text: "- [/] レビュー対応" });
+  });
+
+  it("タイマーを保存できなければ、書き込まずに知らせ、今のタイマーも変えない", async () => {
+    const { files, clock, store, editor, notices, errors } = setup(running());
+    clock.advance(7);
+    store.failing = true;
+
+    expect(await editor.edit(today, { kind: "interrupt" })).toBe("refused");
+
+    expect(files.body(today)).toBe(body);
+    expect(editor.current()).toEqual(running());
+    expect(notices).toEqual(["ファイルに書き込めませんでした"]);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("書き込みに失敗し、タイマーを元に戻す保存にも失敗したら、例外を onError に渡して知らせる", async () => {
+    const { files, clock, store, editor, notices, errors } = setup(running());
+    clock.advance(7);
+    files.failNextWrite = true;
+    store.failAfterSaves = 1;
+
+    expect(await editor.edit(today, { kind: "interrupt" })).toBe("refused");
+
+    expect(errors).toHaveLength(2);
+    expect(notices).toEqual(["ファイルに書き込めませんでした"]);
+  });
+
   it("対象が見つからず捨てたときは知らせる", async () => {
     const { files, editor, notices, store } = setup(running({ held: true }));
     files.write(today, body.replace("提案資料", "提案資料の構成"));
@@ -233,6 +286,50 @@ describe("DayEditor：毎秒の満了の判定", () => {
     expect(store.current()).toBeUndefined();
     expect(alarms).toEqual(["25分たちました。「提案資料」にポモドーロを記録しました"]);
     expect(notices).toEqual([]);
+  });
+
+  it("満了を確定できなければ1回だけ知らせて保留にし、毎秒やり直さない", async () => {
+    const { files, clock, editor, notices, store } = setup(running());
+    files.remove(today);
+    clock.advance(25);
+
+    editor.tick();
+    await settle();
+    editor.tick();
+    await settle();
+
+    expect(notices).toEqual(["2026-11-05 のファイルがありません"]);
+    expect(store.current()).toEqual(running({ held: true }));
+
+    files.write(today, body);
+    await settle();
+    await settle();
+    expect(files.body(today)).toContain("    - 25分 ポモドーロ\n    - 25分 ポモドーロ\n");
+  });
+
+  it("満了の書き込みに失敗しても、毎秒やり直さない", async () => {
+    const { files, clock, editor, notices } = setup(running());
+    clock.advance(25);
+    files.failNextWrite = true;
+
+    editor.tick();
+    await settle();
+    editor.tick();
+    await settle();
+
+    expect(notices).toEqual(["ファイルに書き込めませんでした"]);
+    expect(files.startedWrites).toBe(1);
+  });
+
+  it("満了の判定でタイマーを保存できなくても、例外を onError に渡す", async () => {
+    const { clock, editor, store, errors } = setup(running());
+    clock.advance(25);
+    store.failing = true;
+
+    editor.tick();
+    await settle();
+
+    expect(errors.length).toBeGreaterThan(0);
   });
 
   it("25分前は何もしない", async () => {

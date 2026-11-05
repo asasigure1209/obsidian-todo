@@ -25,22 +25,19 @@ export const expiryAlarm: Alarm = {
     showSystemNotification(message);
     beep();
   },
+  prepare: () => {
+    // 満了のときは本人が画面を見ていないことが多いので、計測を始めたときに許可を尋ねておく
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
+  },
 };
 
-/** 許可が決まっていなければ、最初の1回だけ尋ねる。断られていれば出さない */
+/** 許可されていれば出す。許可は prepare で尋ねてある */
 function showSystemNotification(message: string): void {
-  if (typeof Notification === "undefined" || Notification.permission === "denied") {
-    return;
-  }
-  if (Notification.permission === "granted") {
+  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
     notifyNow(message);
-    return;
   }
-  void Notification.requestPermission().then((permission) => {
-    if (permission === "granted") {
-      notifyNow(message);
-    }
-  });
 }
 
 /** 通知をクリックすると Obsidian を前面に出す */

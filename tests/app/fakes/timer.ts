@@ -18,6 +18,10 @@ export class FakeClock implements Clock {
 /** メモリ上の保存先。保存した順に saved に残す */
 export class FakeTimerStore implements TimerStore {
   saved: Timer[] = [];
+  /** true の間、保存は失敗する */
+  failing = false;
+  /** この回数だけ保存した後は、保存が失敗する */
+  failAfterSaves: number | undefined;
 
   constructor(private timer: Timer = undefined) {}
 
@@ -26,6 +30,9 @@ export class FakeTimerStore implements TimerStore {
   }
 
   async save(timer: Timer): Promise<void> {
+    if (this.failing || this.saved.length >= (this.failAfterSaves ?? Number.POSITIVE_INFINITY)) {
+      throw new Error("保存できない");
+    }
     this.timer = timer;
     this.saved.push(timer);
   }

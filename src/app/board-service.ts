@@ -107,8 +107,9 @@ class Session implements BoardSession {
     return this.edit("complete", { kind: "complete", card }, (doc) => completeCard(doc, card));
   }
 
+  /** 経過分を記録するだけなので、作業時間の修正として扱う。日付をまたいで過去の日になったボードでも、その日の計測を止められる */
   interrupt(): Promise<void> {
-    return this.edit("move", { kind: "interrupt" });
+    return this.edit("work", { kind: "interrupt" });
   }
 
   next(card: LineRef): Promise<void> {

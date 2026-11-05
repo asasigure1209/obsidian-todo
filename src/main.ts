@@ -26,7 +26,11 @@ export default class DailyKanbanTodoPlugin extends Plugin {
       onError: reportError,
     });
     this.register(() => editor.close());
-    this.registerInterval(window.setInterval(() => editor.tick(), TICK_MS));
+    // Vault の準備ができてから判定を始める。起動直後にその日のファイルがまだ「ない」と判定しないため
+    this.app.workspace.onLayoutReady(() => {
+      editor.tick();
+      this.registerInterval(window.setInterval(() => editor.tick(), TICK_MS));
+    });
     const deps: BoardDeps = {
       files,
       clock: systemClock,

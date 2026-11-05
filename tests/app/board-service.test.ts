@@ -39,7 +39,7 @@ function open(files: FakeDayFiles, dayKey = today, timer: Timer = undefined): Op
       store: new FakeTimerStore(timer),
       clock,
       notifier,
-      alarm: { ring: () => {} },
+      alarm: { ring: () => {}, prepare: () => {} },
       onError,
     },
     timer,
@@ -505,20 +505,29 @@ describe("openBoard：タイマー", () => {
     expect(received.at(-1)).not.toHaveProperty("running");
   });
 
-  it("過去の日のボードではタイマーを操作できない", async () => {
+  it("過去の日のボードでは計測を始められない", async () => {
     const files = new FakeDayFiles();
     files.write(yesterday, body);
     const { session, notices } = open(files, yesterday);
     await settle();
 
     await session.next(proposal);
-    await session.interrupt();
 
     expect(files.startedWrites).toBe(0);
-    expect(notices).toEqual([
-      "過去の日は、作業時間の修正だけができます",
-      "過去の日は、作業時間の修正だけができます",
-    ]);
+    expect(notices).toEqual(["過去の日は、作業時間の修正だけができます"]);
+  });
+
+  it("日付をまたいで過去の日になったボードでも、その日の計測は「中断」で止めて記録できる", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, body);
+    const { session, notices, clock } = open(files, yesterday, { ...running, dayKey: yesterday });
+    await settle();
+    clock.advance(5);
+
+    await session.interrupt();
+
+    expect(files.body(yesterday)).toContain("    - 5分 中断\n");
+    expect(notices).toEqual([]);
   });
 
   it("保留中のタイマーでも、対象が見つかれば計測中のカードとして示す", async () => {

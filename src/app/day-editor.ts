@@ -4,7 +4,13 @@ import type { DayFiles } from "@/domain/day-files";
 import { parseDocument, parseTodoLine } from "@/domain/document";
 import { POMODORO_MINUTES } from "@/domain/minutes";
 import type { Alarm, Notifier } from "@/domain/notifier";
-import { stepTimer, type Timer, type TimerOp, type TimerStep } from "@/domain/timer";
+import {
+  type RunningTimer,
+  stepTimer,
+  type Timer,
+  type TimerOp,
+  type TimerStep,
+} from "@/domain/timer";
 import type { TimerStore } from "@/domain/timer-store";
 
 export interface EditorDeps {
@@ -89,9 +95,22 @@ export class DayEditor {
       return;
     }
     this.expiring = true;
-    void this.edit(timer.dayKey, { kind: "expire" }).finally(() => {
-      this.expiring = false;
-    });
+    void this.edit(timer.dayKey, { kind: "expire" })
+      .then(() => this.holdIfUnchanged(timer))
+      .catch(this.deps.onError)
+      .finally(() => {
+        this.expiring = false;
+      });
+  }
+
+  /**
+   * 満了を確定できなかった（ファイルがない、書き込めない）とき、タイマーは元のまま残る。
+   * そのときは保留にして毎秒やり直さず、タイマーの日のファイルが変わったときか、次の操作で判定し直す
+   */
+  private async holdIfUnchanged(timer: RunningTimer): Promise<void> {
+    if (sameTimer(this.timer, timer)) {
+      await this.setTimer({ ...timer, held: true });
+    }
   }
 
   close(): void {
@@ -101,9 +120,14 @@ export class DayEditor {
 
   /** ほかの日のタイマーがあるときに新しく計測を始めるなら、先にその日のファイルへ中断を記録する */
   private async finishOtherDay(dayKey: string, op: TimerOp): Promise<void> {
-    const starts = (op.kind === "move" && op.status === "doing") || op.kind === "next";
-    if (starts && this.timer && this.timer.dayKey !== dayKey) {
-      await this.apply(this.timer.dayKey, { kind: "interrupt" });
+    if (!(startsTimer(op) && this.timer && this.timer.dayKey !== dayKey)) {
+      return;
+    }
+    await this.apply(this.timer.dayKey, { kind: "interrupt" });
+    // 中断を記録できずに残ったタイマーは、置き換える前に捨てて知らせる（AD-6）
+    if (this.timer && this.timer.dayKey !== dayKey) {
+      await this.setTimer(undefined);
+      this.deps.notifier.notify(DISCARDED_MESSAGE);
     }
   }
 
@@ -120,7 +144,7 @@ export class DayEditor {
       this.announce(step, before);
       return "done";
     } catch (error) {
-      await this.setTimer(before);
+      await this.setTimer(before).catch(this.deps.onError);
       this.report(error);
       return "refused";
     }
@@ -161,6 +185,9 @@ export class DayEditor {
 
   /** 満了は見逃さないよう Alarm で知らせる。カードの名前は、確定する前のタイマーの行から取る */
   private announce(step: TimerStep, before: Timer): void {
+    if (step.timer && step.timer.startedAt !== before?.startedAt) {
+      this.deps.alarm.prepare();
+    }
     if (step.notice === "expired" && before) {
       this.deps.alarm.ring(expiredMessage(before.text));
     } else if (step.notice === "discarded") {
@@ -181,8 +208,9 @@ export class DayEditor {
     if (sameTimer(timer, this.timer)) {
       return;
     }
-    this.timer = timer;
+    // 保存できてから持ち替える。保存に失敗したら、今のタイマーは変えない
     await this.deps.store.save(timer);
+    this.timer = timer;
     this.watch();
   }
 
@@ -208,6 +236,11 @@ export class DayEditor {
   private now(): number {
     return this.deps.clock.now().getTime();
   }
+}
+
+/** 新しく計測を始める操作か */
+function startsTimer(op: TimerOp): boolean {
+  return (op.kind === "move" && op.status === "doing") || op.kind === "next";
 }
 
 function sameTimer(a: Timer, b: Timer): boolean {

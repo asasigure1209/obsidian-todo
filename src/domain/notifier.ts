@@ -9,4 +9,6 @@ export interface Notifier {
  */
 export interface Alarm {
   ring(message: string): void;
+  /** 計測を始めたとき（本人が操作しているとき）に呼ぶ。OS の通知の許可を、満了より前に尋ねておく */
+  prepare(): void;
 }
