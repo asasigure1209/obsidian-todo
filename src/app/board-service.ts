@@ -1,22 +1,17 @@
+import { type BoardEdit, boardEdits } from "@/app/board/operations";
+import { type BoardState, boardState, LOADING, readState, UNREADABLE } from "@/app/board/state";
 import type { DayEditor } from "@/app/day-editor";
 import { PAST_DAY_MESSAGE } from "@/app/messages";
 import { type Readable, Store } from "@/app/store";
-import { type Board, type RunningCard, runningCard, toBoard } from "@/domain/board";
 import type { Clock } from "@/domain/clock";
 import { isRejection, type LineRef } from "@/domain/commands/command";
-import { editWork, type WorkEdits } from "@/domain/commands/work";
-import { canEdit, type EditKind, toDayKey } from "@/domain/day";
+import type { WorkEdits } from "@/domain/commands/work";
+import { canEdit, toDayKey } from "@/domain/day";
 import type { DayFiles } from "@/domain/day-files";
-import { type DayDocument, parseDocument } from "@/domain/document/body";
+import type { DayDocument } from "@/domain/document/body";
 import type { Status } from "@/domain/document/todo-line";
 import type { Notifier } from "@/domain/notifier";
-import { runningTarget, stepTimer, type TimerOp } from "@/domain/timer";
-
-export type BoardState =
-  | { kind: "loading" }
-  | { kind: "missing" }
-  | { kind: "unreadable" }
-  | { kind: "board"; board: Board; running?: RunningCard };
+import { stepTimer, type TimerOp } from "@/domain/timer";
 
 /** 1日のボードの窓口。表示する状態と、ボードからの操作をまとめて持つ。操作は、書き込めたら true で終わる */
 export interface BoardSession extends Readable<BoardState> {
@@ -43,10 +38,6 @@ export interface BoardDeps {
   /** 受け取る側や本文の解釈で起きた例外の行き先 */
   onError: (error: unknown) => void;
 }
-
-const LOADING: BoardState = { kind: "loading" };
-const MISSING: BoardState = { kind: "missing" };
-const UNREADABLE: BoardState = { kind: "unreadable" };
 
 export function openBoard(deps: BoardDeps, dayKey: string): BoardSession {
   return new Session(deps, dayKey);
@@ -84,23 +75,23 @@ class Session implements BoardSession {
   }
 
   move(card: LineRef, status: Status, position: number): Promise<boolean> {
-    return this.edit("move", { kind: "move", card, status, position });
+    return this.edit(boardEdits.move(card, status, position));
   }
 
   complete(card: LineRef): Promise<boolean> {
-    return this.edit("complete", { kind: "complete", card });
+    return this.edit(boardEdits.complete(card));
   }
 
   interrupt(): Promise<boolean> {
-    return this.edit("interrupt", { kind: "interrupt" });
+    return this.edit(boardEdits.interrupt());
   }
 
   next(card: LineRef): Promise<boolean> {
-    return this.edit("move", { kind: "next", card });
+    return this.edit(boardEdits.next(card));
   }
 
   editWork(card: LineRef, edits: WorkEdits): Promise<boolean> {
-    return this.edit("work", { kind: "edit", command: (doc) => editWork(doc, card, edits) });
+    return this.edit(boardEdits.editWork(card, edits));
   }
 
   close(): void {
@@ -109,7 +100,7 @@ class Session implements BoardSession {
   }
 
   /** 書き込めたら true */
-  private edit(kind: EditKind, op: TimerOp): Promise<boolean> {
+  private edit({ kind, op }: BoardEdit): Promise<boolean> {
     if (this.closed) {
       return Promise.resolve(false);
     }
@@ -177,18 +168,14 @@ class Session implements BoardSession {
       return;
     }
     this.loaded = true;
-    this.doc = read.body === undefined ? undefined : parseDocument(read.body);
-    this.states.emit(this.doc ? this.toState(this.doc) : MISSING);
+    const { doc, state } = readState(read.body, this.deps.editor.current(), this.dayKey);
+    this.doc = doc;
+    this.states.emit(state);
   }
 
-  /**
-   * 計測中のカードは、この日のタイマーの対象が見つかったときだけ示す。
-   * タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい
-   */
+  /** タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい */
   private toState(doc: DayDocument): BoardState {
-    const board = toBoard(doc);
-    const running = runningCard(board, runningTarget(this.deps.editor.current(), doc, this.dayKey));
-    return running ? { kind: "board", board, running } : { kind: "board", board };
+    return boardState(doc, this.deps.editor.current(), this.dayKey);
   }
 }
 

@@ -201,6 +201,9 @@ src/
     day-files.ts          その日のファイルの取得元の型（実体は adapters/vault.ts）
   app/
     board-service.ts      ファイルの変更を受けて読み直す（AD-2）。操作を先読みしてから、day-editor に渡す（AD-3）
+    board/
+      state.ts            ボードに流す状態（読み込み中・ファイルなし・読めない・ボード）と、本文からの組み立て
+      operations.ts       ボードの操作ごとの、その日にできるかの区分とタイマーの遷移
     day-editor.ts         書き込みを1本に並べ、タイマーを保存してから vault.process で書き戻す。毎秒の満了の判定（AD-6）
     store.ts              状態を受け取り手へ流す部品（Svelte のストアと同じ形）
     messages.ts           利用者への知らせの文言
