@@ -1,5 +1,6 @@
 import type { WorkRecord } from "@/domain/board";
-import { editedKind, type LineRef, type WorkEdits } from "@/domain/commands";
+import type { LineRef } from "@/domain/commands/command";
+import { editedKind, type WorkEdits } from "@/domain/commands/work";
 import { isWorkMinutes, type WorkKind } from "@/domain/document/work-entry";
 
 /** ダイアログの1行。record は開いたときにあった記録で、ない行は足した行。minutes は空欄なら NaN */

@@ -1,4 +1,4 @@
-import type { LineRef } from "@/domain/commands";
+import type { LineRef } from "@/domain/commands/command";
 import { type DayDocument, type TodoBlock, todoBlocks } from "@/domain/document/body";
 import type { Estimate, Status } from "@/domain/document/todo-line";
 import { type WorkKind, workLines } from "@/domain/document/work-entry";

@@ -57,7 +57,8 @@ TDD のサイクルは Claude に任せる。本人はコミットや PR でテ�
 | **Large** | 本物の Obsidian | `dev-vault` | 手動の確認手順（6章） | ごく少数 |
 
 - `src/adapters/` と `src/ui/` は自動テストの対象にしない。`adapters/` は Obsidian の API を呼ぶだけの薄い層に保ち、判断を含むコードは `domain/` か `app/` に寄せる。UI の見た目と操作は Large で確かめる
-- テストファイルは `tests/` 以下に、`src/` と同じ層の名前で置く（`tests/domain/`、`tests/app/`）。設定ファイルを検査するテストは `tests/config/`
+- テストファイルは `tests/` 以下に、`src/` と同じ層の名前で置く（`tests/domain/`、`tests/app/`）。設定ファイルを検査するテストは `tests/config/`。`src/` がディレクトリで分かれていれば、テストも同じディレクトリに分ける（`tests/domain/document/` など）
+- ほかのディレクトリにあるテストの部品（偽物・arbitrary）は `@tests/...` で import する。`../` は禁止のため
 
 ---
 

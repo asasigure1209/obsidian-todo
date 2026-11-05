@@ -1,14 +1,13 @@
+import { completeCard, moveCard } from "@/domain/commands/card";
 import {
-  addWork,
-  completeCard,
   type DocumentCommand,
   findCard,
   isRejection,
   type LineRef,
-  moveCard,
   type Rejection,
   STALE,
-} from "@/domain/commands";
+} from "@/domain/commands/command";
+import { addWork } from "@/domain/commands/work";
 import { type DayDocument, todoBlocks } from "@/domain/document/body";
 import { formatTodoLine, parseTodoLine, type Status } from "@/domain/document/todo-line";
 import type { WorkKind } from "@/domain/document/work-entry";

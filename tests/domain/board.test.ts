@@ -1,7 +1,9 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Board, toBoard } from "@/domain/board";
-import { editWork, isRejection, type LineRef, moveCard } from "@/domain/commands";
+import { moveCard } from "@/domain/commands/card";
+import { isRejection, type LineRef } from "@/domain/commands/command";
+import { editWork } from "@/domain/commands/work";
 import { parseDocument, todoBlocks } from "@/domain/document/body";
 import { markdownLike } from "./document/arbitraries";
 
