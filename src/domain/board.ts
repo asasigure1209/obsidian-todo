@@ -2,11 +2,11 @@ import type { LineRef } from "@/domain/commands";
 import {
   type DayDocument,
   type Estimate,
-  parseWorkEntry,
   type Status,
   type TodoBlock,
   todoBlocks,
   type WorkKind,
+  workLines,
 } from "@/domain/document";
 
 /** 作業時間の1件。ref はそのまま作業時間のコマンドに渡せる（カードの中で n 番目の作業時間の行） */
@@ -63,15 +63,8 @@ function toCard(block: TodoBlock, index: number, key: string): Card {
 }
 
 function workEntries(block: TodoBlock): WorkRecord[] {
-  return block.children
-    .flatMap((child) => {
-      const entry = parseWorkEntry(child.text);
-      return entry ? [{ text: child.text, entry }] : [];
-    })
-    .map(({ text, entry: { minutes, kind, memo } }, index) => ({
-      ref: { index, text },
-      minutes,
-      kind,
-      ...(memo !== undefined && { memo }),
-    }));
+  return workLines(block).map(({ line, entry: { indent: _indent, ...fields } }, index) => ({
+    ref: { index, text: line.text },
+    ...fields,
+  }));
 }

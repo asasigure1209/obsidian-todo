@@ -27,15 +27,11 @@ const { card, status, position, running, session, openWork }: Props = $props();
     <p class="name">{card.name}</p>
     <div class="meta">
       <span class="figures">
-        {#if status === "done"}
-          <span>実績 {card.workedMinutes}分{card.estimate ? ` ／ 見積 ${card.estimate}` : ""}</span>
-        {:else}
-          {#if status === "doing"}
-            <span>作業 {card.workedMinutes}分</span>
-          {/if}
-          {#if card.estimate}
-            <span>見積 {card.estimate}</span>
-          {/if}
+        {#if status !== "todo"}
+          <span>{status === "done" ? "実績" : "作業"} {card.workedMinutes}分</span>
+        {/if}
+        {#if card.estimate}
+          <span>見積 {card.estimate}</span>
         {/if}
       </span>
       <button type="button" class="work-link" onclick={() => openWork(card)}>時間を修正</button>
@@ -109,7 +105,13 @@ const { card, status, position, running, session, openWork }: Props = $props();
 }
 
 .done .figures {
+  gap: var(--size-2-2);
   color: var(--text-normal);
+}
+
+/* 完了は「実績 N分 ／ 見積 Y」と並べる（モック） */
+.done .figures span + span::before {
+  content: "／ ";
 }
 
 .work-link {

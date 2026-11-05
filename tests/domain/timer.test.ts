@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
+import { editWork, isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
 import { parseDocument, parseWorkEntry, serializeDocument, todoBlocks } from "@/domain/document";
 import {
   parseTimer,
@@ -236,12 +236,16 @@ describe("stepTimer（design 8.1）", () => {
   });
 });
 
-describe("stepTimer：作業時間の修正（M2）", () => {
+describe("stepTimer：本文だけの変更（M2 の保存など）", () => {
   const entry = { index: 0, text: "    - 25分 ポモドーロ" };
   const edits = { updated: [{ entry, minutes: 20 }], removed: [], added: [5] };
+  const editOf = (target: LineRef, workEdits: WorkEdits): TimerOp => ({
+    kind: "edit",
+    command: (doc) => editWork(doc, target, workEdits),
+  });
 
-  it("作業時間の修正は本文に当てるだけで、計測は変えない", () => {
-    const result = step(running(), { kind: "work", card: proposal, edits }, at(30));
+  it("本文だけの変更は本文に当てるだけで、計測は変えない", () => {
+    const result = step(running(), editOf(proposal, edits), at(30));
 
     expect(result.written).toBe(`- [/] 提案資料 [est:: 3]
     - 20分 手動
@@ -252,23 +256,18 @@ describe("stepTimer：作業時間の修正（M2）", () => {
     expect(result.timer).toEqual(running());
   });
 
-  it("対象が見つからなくても、作業時間の修正では判定しない（保留にも、捨てもしない）", () => {
+  it("対象が見つからなくても、本文だけの変更では判定しない（保留にも、捨てもしない）", () => {
     const renamed = board.replace("- [/] 提案資料 [est:: 3]", "- [/] 提案資料の構成 [est:: 3]");
     const held = running({ held: true });
 
-    const result = step(
-      held,
-      { kind: "work", card: review, edits: { ...edits, updated: [] } },
-      at(3),
-      renamed,
-    );
+    const result = step(held, editOf(review, { ...edits, updated: [] }), at(3), renamed);
 
     expect(result.timer).toEqual(held);
     expect(result.notice).toBeUndefined();
   });
 
-  it("修正できなければ断り、計測は変えない", () => {
-    const result = step(running(), { kind: "work", card: review, edits }, at(3));
+  it("変更できなければ断り、計測は変えない", () => {
+    const result = step(running(), editOf(review, edits), at(3));
 
     expect(result.result).toEqual({ rejected: "stale" });
     expect(result.timer).toEqual(running());
@@ -413,8 +412,8 @@ describe("stepTimer の性質", () => {
   });
 });
 
-describe("stepTimer の性質：作業時間の修正", () => {
-  const withWorkOp = markdownLike.chain((body) => {
+describe("stepTimer の性質：本文だけの変更", () => {
+  const withEditOp = markdownLike.chain((body) => {
     const refs = todoBlocks(parseDocument(body).segments).map((block, index) =>
       card(index, block.head.text),
     );
@@ -426,14 +425,19 @@ describe("stepTimer の性質：作業時間の修正", () => {
     });
     return fc.tuple(
       fc.constant(body),
-      fc.record({ kind: fc.constant("work" as const), card: ref, edits }),
+      fc.tuple(ref, edits).map(
+        ([target, workEdits]): TimerOp => ({
+          kind: "edit",
+          command: (doc) => editWork(doc, target, workEdits),
+        }),
+      ),
     );
   });
 
-  it("どんな本文とタイマーでも、作業時間の修正ではタイマーは変わらず、知らせることもない", () => {
+  it("どんな本文とタイマーでも、本文だけの変更ではタイマーは変わらず、知らせることもない", () => {
     fc.assert(
       fc.property(
-        withWorkOp,
+        withEditOp,
         fc.option(fc.constantFrom(...markdownTexts()), { nil: undefined }),
         fc.boolean(),
         fc.integer({ min: 0, max: 120 }),

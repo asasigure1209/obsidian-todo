@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Board, toBoard } from "@/domain/board";
-import { isRejection, type LineRef, moveCard, removeWork } from "@/domain/commands";
+import { editWork, isRejection, type LineRef, moveCard } from "@/domain/commands";
 import { parseDocument, todoBlocks } from "@/domain/document";
 import { markdownLike } from "./arbitraries";
 
@@ -49,7 +49,8 @@ describe("toBoard", () => {
       },
     ]);
     const entry = card?.entries[1]?.ref as LineRef;
-    expect(isRejection(removeWork(doc, card?.ref as LineRef, entry))).toBe(false);
+    const edits = { updated: [], removed: [entry], added: [] };
+    expect(isRejection(editWork(doc, card?.ref as LineRef, edits))).toBe(false);
   });
 
   it("TODO 行を状態ごとに 今日やる・着手中・完了 の列へ分ける", () => {

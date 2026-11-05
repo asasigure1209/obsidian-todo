@@ -3,13 +3,13 @@ import { untrack } from "svelte";
 import type { BoardSession } from "@/app/board-service";
 import type { Card } from "@/domain/board";
 import type { WorkKind } from "@/domain/document";
-import { pomodoroEquivalent } from "@/domain/minutes";
+import { POMODORO_MINUTES, pomodoroEquivalent } from "@/domain/minutes";
 import {
   addMinutes,
   canSave,
   type DraftRow,
   draftTotal,
-  hasChanges,
+  hasEdits,
   openDraft,
   removeRow,
   rowKind,
@@ -29,7 +29,7 @@ const { card, session, close }: Props = $props();
 const QUICK_MINUTES = [
   [5, "＋5分"],
   [15, "＋15分"],
-  [25, "＋25分（1ポモドーロ）"],
+  [POMODORO_MINUTES, `＋${POMODORO_MINUTES}分（1ポモドーロ）`],
 ] as const;
 const KIND_LABELS: Record<WorkKind, string> = {
   ポモドーロ: "ポモドーロ",
@@ -65,12 +65,13 @@ function addCustom(event: KeyboardEvent & { currentTarget: HTMLInputElement }): 
 
 /** 保存できたら閉じる。断られたら（通知が出る）下書きを残して開いたままにする。変更がなければ書かずに閉じる */
 async function save(): Promise<void> {
-  if (!hasChanges(draft)) {
+  const edits = toEdits(draft);
+  if (!hasEdits(edits)) {
     close();
     return;
   }
   saving = true;
-  const saved = await session.editWork(card.ref, toEdits(draft));
+  const saved = await session.editWork(card.ref, edits);
   saving = false;
   if (saved) {
     close();

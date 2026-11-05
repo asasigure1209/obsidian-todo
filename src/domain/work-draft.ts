@@ -1,6 +1,6 @@
 import type { WorkRecord } from "@/domain/board";
-import type { WorkEdits } from "@/domain/commands";
-import type { WorkKind } from "@/domain/document";
+import { editedKind, type LineRef, type WorkEdits } from "@/domain/commands";
+import { isWorkMinutes, type WorkKind } from "@/domain/document";
 
 /** ダイアログの1行。record は開いたときにあった記録で、ない行は足した行。minutes は空欄なら NaN */
 export interface DraftRow {
@@ -15,7 +15,7 @@ export interface DraftRow {
  */
 export interface WorkDraft {
   rows: DraftRow[];
-  removed: WorkRecord[];
+  removed: LineRef[];
   nextKey: number;
 }
 
@@ -25,11 +25,6 @@ export function openDraft(records: WorkRecord[]): WorkDraft {
     removed: [],
     nextKey: records.length,
   };
-}
-
-/** 作業時間の行にできる分数か（1以上の整数） */
-export function isWorkMinutes(minutes: number): boolean {
-  return Number.isInteger(minutes) && minutes >= 1;
 }
 
 /** 「＋5分」などの追加。手動の行を末尾に足す */
@@ -53,13 +48,13 @@ export function removeRow(draft: WorkDraft, key: number): WorkDraft {
   return {
     ...draft,
     rows: draft.rows.filter((row) => row.key !== key),
-    removed: record ? [...draft.removed, record] : draft.removed,
+    removed: record ? [...draft.removed, record.ref] : draft.removed,
   };
 }
 
 /** 保存したときの種類。分数を変えた行と足した行は手動になる */
 export function rowKind(row: DraftRow): WorkKind {
-  return row.record && !changed(row, row.record) ? row.record.kind : "手動";
+  return row.record ? editedKind(row.record, row.minutes) : "手動";
 }
 
 /** 空欄の行は数えない */
@@ -78,14 +73,13 @@ export function toEdits(draft: WorkDraft): WorkEdits {
         ? [{ entry: row.record.ref, minutes: row.minutes }]
         : [],
     ),
-    removed: draft.removed.map((record) => record.ref),
+    removed: draft.removed,
     added: draft.rows.flatMap((row) => (row.record ? [] : [row.minutes])),
   };
 }
 
 /** 保存して変わるものがあるか。なければ書き込まずに閉じる */
-export function hasChanges(draft: WorkDraft): boolean {
-  const { updated, removed, added } = toEdits(draft);
+export function hasEdits({ updated, removed, added }: WorkEdits): boolean {
   return updated.length + removed.length + added.length > 0;
 }
 

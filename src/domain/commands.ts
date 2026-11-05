@@ -14,8 +14,9 @@ import {
   type TodoBlock,
   type TodoLine,
   todoBlocks,
-  type WorkEntry,
   type WorkKind,
+  type WorkLine,
+  workLines,
 } from "@/domain/document";
 
 /** 操作の対象の行。n 番目の TODO ブロック（またはカードの中で n 番目の作業時間の行）と、その行の文字列（AD-5） */
@@ -107,23 +108,6 @@ export function addWork(doc: DayDocument, card: LineRef, work: WorkInput): Comma
   });
 }
 
-/** 作業時間を書き換える（M2）。分数を変えたら、手で直した記録なので種類は手動になる。メモを省くと元のメモを残し、空文字で消す */
-export function updateWork(
-  doc: DayDocument,
-  card: LineRef,
-  entry: LineRef,
-  work: Omit<WorkInput, "kind">,
-): CommandResult {
-  return updateBlock(doc, card, (block) => {
-    const current = findEntry(block, entry);
-    if (!current) {
-      return STALE;
-    }
-    const line = rewriteEntry(current, work);
-    return line ? replaceChild(block, current, line) : INVALID;
-  });
-}
-
 /** M2 の「保存」。開いたときの記録への書き換えと削除、足した分数（手動） */
 export interface WorkEdits {
   updated: { entry: LineRef; minutes: number }[];
@@ -132,35 +116,16 @@ export interface WorkEdits {
 }
 
 /**
- * M2 の変更を1回の変更にまとめて当てる。どれか1つでも一致しなければ全体を何もしない。
- * 書き換えは行の数を変えないので先に当て、削除は後ろの行からにして、前の行の位置をずらさない。
- * 開いた後にタイマーが足した記録は末尾に増えるだけなので、開いたときの位置のまま当たる
+ * M2 の変更を1回の変更にまとめて当てる。どれか1つでも一致しない・書式にならないなら全体を何もしない。
+ * どの位置も変える前の子の行で探すので、当てる順番に左右されない。足した分数は最後の子の行として足す
  */
 export function editWork(doc: DayDocument, card: LineRef, edits: WorkEdits): CommandResult {
-  const removed = [...edits.removed].sort((a, b) => b.index - a.index);
-  const steps: DocumentCommand[] = [
-    ...edits.updated.map(
-      ({ entry, minutes }) =>
-        (d: DayDocument) =>
-          updateWork(d, card, entry, { minutes }),
-    ),
-    ...removed.map((entry) => (d: DayDocument) => removeWork(d, card, entry)),
-    ...edits.added.map(
-      (minutes) => (d: DayDocument) => addWork(d, card, { minutes, kind: "手動" }),
-    ),
-  ];
-  const start: CommandResult = findCard(doc, card) ? doc : STALE;
-  return steps.reduce((result, step) => (isRejection(result) ? result : step(result)), start);
+  return updateBlock(doc, card, (block) => editBlock(block, edits));
 }
 
-/** 作業時間を削除する（M2）。書式外の子の行は残す */
-export function removeWork(doc: DayDocument, card: LineRef, entry: LineRef): CommandResult {
-  return updateBlock(doc, card, (block) => {
-    const current = findEntry(block, entry);
-    return current
-      ? { ...block, children: block.children.filter((child) => child !== current) }
-      : STALE;
-  });
+/** 書き換えた後の種類。分数を変えたら、手で直した記録なので手動になる。分数が同じなら元の種類のまま */
+export function editedKind(entry: { minutes: number; kind: WorkKind }, minutes: number): WorkKind {
+  return minutes === entry.minutes ? entry.kind : "手動";
 }
 
 /** 位置と行の文字列が一致する TODO ブロック。一致しなければ undefined（AD-5） */
@@ -169,9 +134,38 @@ export function findCard(doc: DayDocument, card: LineRef): TodoBlock | undefined
   return block?.head.text === card.text ? block : undefined;
 }
 
-function findEntry(block: TodoBlock, entry: LineRef): Line | undefined {
-  const line = block.children.filter((child) => parseWorkEntry(child.text))[entry.index];
-  return line?.text === entry.text ? line : undefined;
+function findEntry(block: TodoBlock, entry: LineRef): WorkLine | undefined {
+  const found = workLines(block)[entry.index];
+  return found?.line.text === entry.text ? found : undefined;
+}
+
+function editBlock(block: TodoBlock, edits: WorkEdits): TodoBlock | Rejection {
+  const rewrites = edits.updated.map(({ entry, minutes }) => rewriteAt(block, entry, minutes));
+  const removed = edits.removed.map((entry) => findEntry(block, entry)?.line ?? STALE);
+  const added = edits.added.map(
+    (minutes) => workLine(childIndent(block), { minutes, kind: "手動" }) ?? INVALID,
+  );
+  const rejection = [...rewrites, ...removed, ...added].find(isRejection);
+  if (rejection) {
+    return rejection;
+  }
+  const replaced = new Map(rewrites as [Line, Line][]);
+  const kept = block.children.filter((child) => !removed.includes(child));
+  return {
+    ...block,
+    children: [...kept.map((child) => replaced.get(child) ?? child), ...(added as Line[])],
+  };
+}
+
+/** 書き換える前と後の行。字下げ・メモ・改行はそのまま */
+function rewriteAt(block: TodoBlock, entry: LineRef, minutes: number): [Line, Line] | Rejection {
+  const found = findEntry(block, entry);
+  if (!found) {
+    return STALE;
+  }
+  const { indent, memo } = found.entry;
+  const next = workLine(indent, { minutes, kind: editedKind(found.entry, minutes), memo });
+  return next ? [found.line, { ...next, eol: found.line.eol }] : INVALID;
 }
 
 function updateBlock(
@@ -184,10 +178,6 @@ function updateBlock(
   return isRejection(next)
     ? next
     : { ...doc, segments: doc.segments.map((segment) => (segment === target ? next : segment)) };
-}
-
-function replaceChild(block: TodoBlock, current: Line, line: Line): TodoBlock {
-  return { ...block, children: block.children.map((child) => (child === current ? line : child)) };
 }
 
 function withStatus(block: TodoBlock, status: Status): TodoBlock {
@@ -239,7 +229,10 @@ function endOfColumn(segments: Segment[], column: TodoBlock[]): number {
 }
 
 /** 改行は書き戻しで決める（serializeDocument） */
-function workLine(indent: string, work: WorkInput): Line | undefined {
+function workLine(
+  indent: string,
+  work: Omit<WorkInput, "memo"> & { memo?: string | undefined },
+): Line | undefined {
   const memo = singleLine(work.memo ?? "");
   const text = formatWorkEntry({
     indent,
@@ -248,18 +241,6 @@ function workLine(indent: string, work: WorkInput): Line | undefined {
     ...(memo && { memo }),
   });
   return parseWorkEntry(text) ? { text, eol: "" } : undefined;
-}
-
-/** 字下げと改行はそのままに、分数とメモを書き換える */
-function rewriteEntry(line: Line, work: Omit<WorkInput, "kind">): Line | undefined {
-  const { indent, memo, minutes, kind } = parseWorkEntry(line.text) as WorkEntry;
-  const kept = memo === undefined ? {} : { memo };
-  const next = workLine(indent, {
-    ...kept,
-    ...work,
-    kind: work.minutes === minutes ? kind : "手動",
-  });
-  return next && { ...next, eol: line.eol };
 }
 
 function singleLine(text: string): string {

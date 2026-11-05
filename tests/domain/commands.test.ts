@@ -10,8 +10,6 @@ import {
   isRejection,
   type LineRef,
   moveCard,
-  removeWork,
-  updateWork,
   type WorkEdits,
 } from "@/domain/commands";
 import {
@@ -216,7 +214,7 @@ describe("completeCard（「完了にする」ボタン）", () => {
   });
 });
 
-describe("addWork / updateWork / removeWork（作業時間）", () => {
+describe("addWork（作業時間を足す）", () => {
   it("作業時間をカードの最後の子の行として足す", () => {
     const result = run(board, (doc) =>
       addWork(doc, doing, { minutes: 12, kind: "中断", memo: "チャット" }),
@@ -256,67 +254,7 @@ describe("addWork / updateWork / removeWork（作業時間）", () => {
     ).toContain("    - 5分 手動\n");
   });
 
-  it("作業時間を書き換えると、その行の字下げと位置を保ち、種類は手動になる", () => {
-    const body = "- [x] メールの返信\n  - 25分 ポモドーロ\n  - 12分 中断 問い合わせ\n";
-    const entry = { index: 1, text: "  - 12分 中断 問い合わせ" };
-
-    expect(
-      run(body, (doc) => updateWork(doc, card(0, "- [x] メールの返信"), entry, { minutes: 20 })),
-    ).toBe("- [x] メールの返信\n  - 25分 ポモドーロ\n  - 20分 手動 問い合わせ\n");
-  });
-
-  it("作業時間のメモは、渡せば書き換え、空文字なら消す", () => {
-    const body = "- [x] メールの返信\n  - 12分 中断 問い合わせ\n";
-    const entry = { index: 0, text: "  - 12分 中断 問い合わせ" };
-    const target = card(0, "- [x] メールの返信");
-
-    expect(run(body, (doc) => updateWork(doc, target, entry, { minutes: 10, memo: "電話" }))).toBe(
-      "- [x] メールの返信\n  - 10分 手動 電話\n",
-    );
-    expect(run(body, (doc) => updateWork(doc, target, entry, { minutes: 10, memo: "" }))).toBe(
-      "- [x] メールの返信\n  - 10分 手動\n",
-    );
-  });
-
-  it("分数を変えずにメモだけ書き換えたときは、種類を変えない", () => {
-    const body = "- [x] メールの返信\n  - 12分 中断 問い合わせ\n";
-    const entry = { index: 0, text: "  - 12分 中断 問い合わせ" };
-
-    expect(
-      run(body, (doc) =>
-        updateWork(doc, card(0, "- [x] メールの返信"), entry, { minutes: 12, memo: "電話" }),
-      ),
-    ).toBe("- [x] メールの返信\n  - 12分 中断 電話\n");
-  });
-
-  it("書き換えた分数が書式にならなければ何もしない", () => {
-    const entry = { index: 0, text: "    - 25分 ポモドーロ" };
-
-    expect(run(board, (doc) => updateWork(doc, doing, entry, { minutes: 0 }))).toEqual({
-      rejected: "invalid",
-    });
-  });
-
-  it("作業時間を削除しても、書式外の子の行は残る", () => {
-    const entry = { index: 0, text: "    - 25分 ポモドーロ" };
-
-    expect(run(board, (doc) => removeWork(doc, doing, entry))).toContain(
-      "- [/] 提案資料の構成を固める [est:: 3]\n    参考: 前回の資料\n- [ ]",
-    );
-  });
-
-  it("作業時間の位置または文字列が一致しなければ何もしない", () => {
-    const stale = { index: 0, text: "    - 20分 ポモドーロ" };
-
-    expect(run(board, (doc) => removeWork(doc, doing, stale))).toEqual({ rejected: "stale" });
-    expect(
-      run(board, (doc) =>
-        updateWork(doc, doing, { index: 1, text: "    参考: 前回の資料" }, { minutes: 5 }),
-      ),
-    ).toEqual({ rejected: "stale" });
-    expect(
-      run(board, (doc) => removeWork(doc, expense, { index: 0, text: "    - 25分 ポモドーロ" })),
-    ).toEqual({ rejected: "stale" });
+  it("作業時間を足すカードの位置または文字列が一致しなければ何もしない", () => {
     expect(
       run(board, (doc) => addWork(doc, card(9, reply.text), { minutes: 5, kind: "手動" })),
     ).toEqual({
@@ -335,6 +273,56 @@ describe("editWork（M2 の保存）", () => {
 `;
   const entry = (index: number, text: string): LineRef => ({ index, text: `    - ${text}` });
   const noEdits: WorkEdits = { updated: [], removed: [], added: [] };
+  const updated = (ref: LineRef, minutes: number): WorkEdits => ({
+    ...noEdits,
+    updated: [{ entry: ref, minutes }],
+  });
+
+  it("分数を書き換えると、その行の字下げと位置とメモを保ち、種類は手動になる", () => {
+    const text = "- [x] メールの返信\n  - 25分 ポモドーロ\n  - 12分 中断 問い合わせ\n";
+    const ref = { index: 1, text: "  - 12分 中断 問い合わせ" };
+
+    expect(run(text, (doc) => editWork(doc, mail, updated(ref, 20)))).toBe(
+      "- [x] メールの返信\n  - 25分 ポモドーロ\n  - 20分 手動 問い合わせ\n",
+    );
+  });
+
+  it("分数を変えずに書き換えたときは、種類を変えない", () => {
+    expect(
+      run(body, (doc) => editWork(doc, mail, updated(entry(1, "12分 中断 問い合わせ"), 12))),
+    ).toBe(body);
+  });
+
+  it("書き換えた分数や足した分数が書式にならなければ何もしない", () => {
+    expect(
+      run(body, (doc) => editWork(doc, mail, updated(entry(0, "25分 ポモドーロ"), 0))),
+    ).toEqual({ rejected: "invalid" });
+    expect(run(body, (doc) => editWork(doc, mail, { ...noEdits, added: [2.5] }))).toEqual({
+      rejected: "invalid",
+    });
+  });
+
+  it("作業時間を削除しても、書式外の子の行は残る", () => {
+    const removed = { ...noEdits, removed: [entry(0, "25分 ポモドーロ")] };
+
+    expect(run(board, (doc) => editWork(doc, doing, removed))).toContain(
+      "- [/] 提案資料の構成を固める [est:: 3]\n    参考: 前回の資料\n- [ ]",
+    );
+  });
+
+  it("作業時間の文字列が一致しなければ何もしない", () => {
+    const removed = { ...noEdits, removed: [entry(0, "25分 ポモドーロ")] };
+
+    expect(run(board, (doc) => editWork(doc, expense, removed))).toEqual({ rejected: "stale" });
+  });
+
+  it("書式外の子の行は、作業時間の位置として数えない", () => {
+    expect(
+      run(board, (doc) =>
+        editWork(doc, doing, updated({ index: 1, text: "    参考: 前回の資料" }, 5)),
+      ),
+    ).toEqual({ rejected: "stale" });
+  });
 
   it("分数の書き換え・削除・追加を1回の変更にまとめる", () => {
     const edits: WorkEdits = {

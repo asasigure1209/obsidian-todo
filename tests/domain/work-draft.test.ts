@@ -4,7 +4,7 @@ import {
   addMinutes,
   canSave,
   draftTotal,
-  hasChanges,
+  hasEdits,
   openDraft,
   removeRow,
   rowKind,
@@ -110,10 +110,12 @@ describe("作業時間の下書き（M2）", () => {
   });
 
   it("分数を変えた・消した・足した行があるときだけ、変更がある", () => {
-    expect(hasChanges(draft)).toBe(false);
-    expect(hasChanges(setMinutes(draft, keyOf(draft, 0), 25))).toBe(false);
-    expect(hasChanges(setMinutes(draft, keyOf(draft, 0), 20))).toBe(true);
-    expect(hasChanges(removeRow(draft, keyOf(draft, 1)))).toBe(true);
-    expect(hasChanges(addMinutes(draft, 5))).toBe(true);
+    const has = (d: WorkDraft) => hasEdits(toEdits(d));
+
+    expect(has(draft)).toBe(false);
+    expect(has(setMinutes(draft, keyOf(draft, 0), 25))).toBe(false);
+    expect(has(setMinutes(draft, keyOf(draft, 0), 20))).toBe(true);
+    expect(has(removeRow(draft, keyOf(draft, 1)))).toBe(true);
+    expect(has(addMinutes(draft, 5))).toBe(true);
   });
 });

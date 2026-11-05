@@ -1,7 +1,7 @@
 import type { DayEditor } from "@/app/day-editor";
 import { type Board, toBoard } from "@/domain/board";
 import type { Clock } from "@/domain/clock";
-import { isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
+import { editWork, isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
 import { canEdit, type EditKind, toDayKey } from "@/domain/day";
 import type { DayFiles } from "@/domain/day-files";
 import { type DayDocument, parseDocument, type Status } from "@/domain/document";
@@ -111,7 +111,7 @@ class Session implements BoardSession {
   }
 
   editWork(card: LineRef, edits: WorkEdits): Promise<boolean> {
-    return this.edit("work", { kind: "work", card, edits });
+    return this.edit("work", { kind: "edit", command: (doc) => editWork(doc, card, edits) });
   }
 
   close(): void {
