@@ -1,5 +1,7 @@
 import type { DayEditor } from "@/app/day-editor";
-import { type Board, toBoard } from "@/domain/board";
+import { PAST_DAY_MESSAGE } from "@/app/messages";
+import { type Readable, Store } from "@/app/store";
+import { type Board, type RunningCard, runningCard, toBoard } from "@/domain/board";
 import type { Clock } from "@/domain/clock";
 import { isRejection, type LineRef } from "@/domain/commands/command";
 import { editWork, type WorkEdits } from "@/domain/commands/work";
@@ -8,19 +10,7 @@ import type { DayFiles } from "@/domain/day-files";
 import { type DayDocument, parseDocument } from "@/domain/document/body";
 import type { Status } from "@/domain/document/todo-line";
 import type { Notifier } from "@/domain/notifier";
-import { type RunningTarget, runningTarget, stepTimer, type TimerOp } from "@/domain/timer";
-
-/** Svelte のストアの約束と同じ形。subscribe はすぐに今の値を渡し、戻り値で購読をやめる */
-export interface Readable<T> {
-  subscribe(run: (value: T) => void): () => void;
-}
-
-/** 計測中のカード。key は Card.key、startedAt から残り時間を出す。count は何個目のポモドーロか */
-export interface RunningCard {
-  key: string;
-  startedAt: number;
-  count: number;
-}
+import { runningTarget, stepTimer, type TimerOp } from "@/domain/timer";
 
 export type BoardState =
   | { kind: "loading" }
@@ -57,7 +47,6 @@ export interface BoardDeps {
 const LOADING: BoardState = { kind: "loading" };
 const MISSING: BoardState = { kind: "missing" };
 const UNREADABLE: BoardState = { kind: "unreadable" };
-const PAST_DAY_MESSAGE = "過去の日は、作業時間の修正だけができます";
 
 export function openBoard(deps: BoardDeps, dayKey: string): BoardSession {
   return new Session(deps, dayKey);
@@ -71,7 +60,6 @@ export function openBoard(deps: BoardDeps, dayKey: string): BoardSession {
  * - 書き込みが断られたら、それより前に受けた操作は、断られた操作の先読みをもとにしているので書き込まずに捨てる
  */
 class Session implements BoardSession {
-  private state = LOADING;
   private doc: DayDocument | undefined;
   private loaded = false;
   private closed = false;
@@ -79,21 +67,20 @@ class Session implements BoardSession {
   private pendingWrites = 0;
   /** 書き込みが断られるたびに進める。進む前に受けた操作は捨てる */
   private epoch = 0;
-  private readonly runs = new Set<(state: BoardState) => void>();
+  private readonly states: Store<BoardState>;
   private readonly stopListening: () => void;
 
   constructor(
     private readonly deps: BoardDeps,
     private readonly dayKey: string,
   ) {
+    this.states = new Store(LOADING, deps.onError);
     this.stopListening = deps.files.onChange(dayKey, () => this.reload());
     this.reload();
   }
 
   subscribe(run: (state: BoardState) => void): () => void {
-    this.runs.add(run);
-    run(this.state);
-    return () => this.runs.delete(run);
+    return this.states.subscribe(run);
   }
 
   move(card: LineRef, status: Status, position: number): Promise<boolean> {
@@ -164,7 +151,7 @@ class Session implements BoardSession {
       this.doc && stepTimer(this.deps.editor.current(), this.doc, this.dayKey, op, now).result;
     if (next && !isRejection(next)) {
       this.doc = next;
-      this.emit(this.toState(next));
+      this.states.emit(this.toState(next));
     }
   }
 
@@ -185,13 +172,13 @@ class Session implements BoardSession {
   private applyRead(read: { body: string | undefined } | undefined): void {
     if (!read) {
       if (!this.loaded) {
-        this.emit(UNREADABLE);
+        this.states.emit(UNREADABLE);
       }
       return;
     }
     this.loaded = true;
     this.doc = read.body === undefined ? undefined : parseDocument(read.body);
-    this.emit(this.doc ? this.toState(this.doc) : MISSING);
+    this.states.emit(this.doc ? this.toState(this.doc) : MISSING);
   }
 
   /**
@@ -203,26 +190,6 @@ class Session implements BoardSession {
     const running = runningCard(board, runningTarget(this.deps.editor.current(), doc, this.dayKey));
     return running ? { kind: "board", board, running } : { kind: "board", board };
   }
-
-  /** 1つの受け取り手の例外で、ほかの受け取り手を止めない */
-  private emit(state: BoardState): void {
-    this.state = state;
-    for (const run of this.runs) {
-      try {
-        run(state);
-      } catch (error) {
-        this.deps.onError(error);
-      }
-    }
-  }
-}
-
-/** 計測中の対象のカード。「何個目」は、そのカードのポモドーロの行の数＋1 */
-function runningCard(board: Board, running: RunningTarget | undefined): RunningCard | undefined {
-  const card = running && board.doing.find((c) => c.ref.index === running.target.index);
-  return card && running
-    ? { key: card.key, startedAt: running.timer.startedAt, count: card.pomodoros + 1 }
-    : undefined;
 }
 
 /** 読めなかったときは undefined */

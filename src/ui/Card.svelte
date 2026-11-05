@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { BoardSession, RunningCard } from "@/app/board-service";
-import type { Card } from "@/domain/board";
+import type { BoardSession } from "@/app/board-service";
+import type { Card, RunningCard } from "@/domain/board";
 import type { Status } from "@/domain/document/todo-line";
 import Timer from "./Timer.svelte";
 

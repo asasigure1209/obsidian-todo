@@ -73,7 +73,7 @@ function eolAfter(text: string, eol: string): string {
 }
 
 /** frontmatter から本文の末尾までの全行 */
-export function documentLines(doc: DayDocument): Line[] {
+function documentLines(doc: DayDocument): Line[] {
   return [...doc.frontmatter, ...doc.segments.flatMap(segmentLines)];
 }
 

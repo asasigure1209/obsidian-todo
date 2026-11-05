@@ -5,8 +5,8 @@ import { editWork, type WorkEdits } from "@/domain/commands/work";
 import { parseDocument, serializeDocument, todoBlocks } from "@/domain/document/body";
 import { parseWorkEntry } from "@/domain/document/work-entry";
 import {
-  parseTimer,
   type RunningTimer,
+  sameTimer,
   startsTimer,
   stepTimer,
   type Timer,
@@ -477,29 +477,6 @@ function markdownTexts(): string[] {
   return ["- [/] b [est:: 2]", "- [/] 提案資料 [est:: 3]", "- [/] a"];
 }
 
-describe("parseTimer（保存領域から読んだ値）", () => {
-  it("形の合う値をタイマーとして読む", () => {
-    expect(parseTimer(running())).toEqual(running());
-  });
-
-  it.each([
-    undefined,
-    null,
-    "timer",
-    {},
-    { ...running(), startedAt: "9:00" },
-    { ...running(), dayKey: 20261105 },
-    { ...running(), text: undefined },
-    { ...running(), held: "no" },
-  ])("形の合わない値（%j）は停止中として読む", (value) => {
-    expect(parseTimer(value)).toBeUndefined();
-  });
-
-  it("余分な項目は読まない", () => {
-    expect(parseTimer({ ...running(), extra: 1 })).toEqual(running());
-  });
-});
-
 describe("startsTimer", () => {
   it("着手中へ動かす操作と「次のポモドーロを開始」だけが、新しく計測を始める", () => {
     expect(startsTimer({ kind: "move", card: review, status: "doing", position: 0 })).toBe(true);
@@ -509,4 +486,26 @@ describe("startsTimer", () => {
     expect(startsTimer({ kind: "complete", card: proposal })).toBe(false);
     expect(startsTimer({ kind: "interrupt" })).toBe(false);
   });
+});
+
+describe("sameTimer", () => {
+  it("停止中どうしは同じ", () => {
+    expect(sameTimer(undefined, undefined)).toBe(true);
+  });
+
+  it("別の値でも、日付・開始時刻・行の文字列・保留が同じなら同じ", () => {
+    expect(sameTimer(running(), running())).toBe(true);
+  });
+
+  it("停止中と計測中は違う", () => {
+    expect(sameTimer(running(), undefined)).toBe(false);
+    expect(sameTimer(undefined, running())).toBe(false);
+  });
+
+  it.each([{ dayKey: "2026-11-04" }, { startedAt: at(1) }, { text: review.text }, { held: true }])(
+    "どれか1つでも違えば違う（%j）",
+    (overrides) => {
+      expect(sameTimer(running(), running(overrides))).toBe(false);
+    },
+  );
 });
