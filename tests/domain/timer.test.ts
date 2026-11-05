@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { isRejection, type LineRef } from "@/domain/commands";
+import { isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
 import { parseDocument, parseWorkEntry, serializeDocument, todoBlocks } from "@/domain/document";
 import {
   parseTimer,
@@ -407,6 +407,42 @@ describe("stepTimer の性質", () => {
             expect(minutesRecorded).toBeGreaterThanOrEqual(1);
             expect(minutesRecorded).toBeLessThanOrEqual(25);
           }
+        },
+      ),
+    );
+  });
+});
+
+describe("stepTimer の性質：作業時間の修正", () => {
+  const withWorkOp = markdownLike.chain((body) => {
+    const refs = todoBlocks(parseDocument(body).segments).map((block, index) =>
+      card(index, block.head.text),
+    );
+    const ref = refs.length > 0 ? fc.constantFrom(...refs) : fc.constant(card(0, "- [ ] なし"));
+    const edits: fc.Arbitrary<WorkEdits> = fc.record({
+      updated: fc.constant([]),
+      removed: fc.constant([]),
+      added: fc.array(fc.integer({ min: 1, max: 60 }), { maxLength: 3 }),
+    });
+    return fc.tuple(
+      fc.constant(body),
+      fc.record({ kind: fc.constant("work" as const), card: ref, edits }),
+    );
+  });
+
+  it("どんな本文とタイマーでも、作業時間の修正ではタイマーは変わらず、知らせることもない", () => {
+    fc.assert(
+      fc.property(
+        withWorkOp,
+        fc.option(fc.constantFrom(...markdownTexts()), { nil: undefined }),
+        fc.boolean(),
+        fc.integer({ min: 0, max: 120 }),
+        ([body, op], text, held, minutes) => {
+          const timer = text === undefined ? undefined : running({ text, held });
+          const result = stepTimer(timer, parseDocument(body), day, op, at(minutes));
+
+          expect(result.timer).toBe(timer);
+          expect(result.notice).toBeUndefined();
         },
       ),
     );

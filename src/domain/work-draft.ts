@@ -83,6 +83,12 @@ export function toEdits(draft: WorkDraft): WorkEdits {
   };
 }
 
+/** 保存して変わるものがあるか。なければ書き込まずに閉じる */
+export function hasChanges(draft: WorkDraft): boolean {
+  const { updated, removed, added } = toEdits(draft);
+  return updated.length + removed.length + added.length > 0;
+}
+
 function changed(row: DraftRow, record: WorkRecord): boolean {
   return row.minutes !== record.minutes;
 }

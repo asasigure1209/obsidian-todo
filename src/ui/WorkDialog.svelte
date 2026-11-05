@@ -9,6 +9,7 @@ import {
   canSave,
   type DraftRow,
   draftTotal,
+  hasChanges,
   openDraft,
   removeRow,
   rowKind,
@@ -41,9 +42,8 @@ let draft = $state(openDraft(untrack(() => card.entries)));
 let saving = $state(false);
 const total = $derived(draftTotal(draft));
 
-/** 種類の下に出す補足。分数を変えた行は、保存すると手動になるのでその印を出す */
-function note(row: DraftRow): string {
-  const kind = rowKind(row);
+/** 種類の下に出す補足。kind は保存したときの種類（分数を変えた行は手動になる） */
+function note(row: DraftRow, kind: WorkKind): string {
   const memo = row.record?.memo;
   if (kind === "ポモドーロ") {
     return "自動で記録";
@@ -63,8 +63,12 @@ function addCustom(event: KeyboardEvent & { currentTarget: HTMLInputElement }): 
   event.currentTarget.value = "";
 }
 
-/** 保存できたら閉じる。断られたら（通知が出る）下書きを残して開いたままにする */
+/** 保存できたら閉じる。断られたら（通知が出る）下書きを残して開いたままにする。変更がなければ書かずに閉じる */
 async function save(): Promise<void> {
+  if (!hasChanges(draft)) {
+    close();
+    return;
+  }
   saving = true;
   const saved = await session.editWork(card.ref, toEdits(draft));
   saving = false;
@@ -75,14 +79,18 @@ async function save(): Promise<void> {
 </script>
 
 <div class="work-dialog">
-  <p class="card-name">{card.name}</p>
+  <header class="title">
+    <h2>作業時間を修正</h2>
+    <p class="card-name">{card.name}</p>
+  </header>
 
   <div class="records">
     <div class="row heading">
       <span>作業した時間</span><span>内容</span><span></span>
     </div>
     {#each draft.rows as row (row.key)}
-      <div class="row" data-kind={rowKind(row)}>
+      {@const kind = rowKind(row)}
+      <div class="row" data-kind={kind}>
         <div class="minutes">
           <input
             type="number"
@@ -96,8 +104,8 @@ async function save(): Promise<void> {
           <span class="unit">分</span>
         </div>
         <div class="kind">
-          <span class="kind-label">{KIND_LABELS[rowKind(row)]}</span>
-          <span class="note">{note(row)}</span>
+          <span class="kind-label">{KIND_LABELS[kind]}</span>
+          <span class="note">{note(row, kind)}</span>
         </div>
         <button
           type="button"
@@ -180,8 +188,22 @@ async function save(): Promise<void> {
   gap: var(--size-4-6);
 }
 
+.title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-2-3);
+  /* 右上の閉じるボタンと重ならないようにする */
+  padding-right: var(--size-4-8);
+}
+
+.title h2 {
+  margin: 0;
+  font-size: var(--font-ui-large);
+  font-weight: var(--font-bold);
+}
+
 .card-name {
-  margin: calc(-1 * var(--size-4-4)) 0 0;
+  margin: 0;
   color: var(--text-muted);
 }
 
