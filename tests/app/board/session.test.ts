@@ -8,8 +8,7 @@ import {
   TODAY,
 } from "@tests/app/fakes/timer";
 import { describe, expect, it } from "vitest";
-import { type BoardSession, openBoard } from "@/app/board/session";
-import type { BoardState } from "@/app/board/state";
+import { type BoardSession, type BoardState, openBoard } from "@/app/board/session";
 import { DayEditor } from "@/app/day-editor";
 import type { LineRef } from "@/domain/commands/command";
 import type { WorkEdits } from "@/domain/commands/work";

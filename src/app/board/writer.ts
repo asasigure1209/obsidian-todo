@@ -16,8 +16,6 @@ export class BoardWriter {
   constructor(
     private readonly editor: Editor,
     private readonly dayKey: string,
-    /** 書き込みが終わるたびに呼ぶ */
-    private readonly onSettled: () => void,
     private readonly onError: (error: unknown) => void,
   ) {}
 
@@ -33,20 +31,15 @@ export class BoardWriter {
     return this.editor
       .edit(this.dayKey, op, () => epoch === this.epoch)
       .then((outcome) => {
-        this.settle(outcome === "refused");
+        if (outcome === "refused") {
+          this.epoch++;
+        }
+        this.pending--;
         return outcome === "done";
       })
       .catch((error: unknown) => {
         this.onError(error);
         return false;
       });
-  }
-
-  private settle(refused: boolean): void {
-    if (refused) {
-      this.epoch++;
-    }
-    this.pending--;
-    this.onSettled();
   }
 }

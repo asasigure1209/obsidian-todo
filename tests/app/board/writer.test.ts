@@ -1,4 +1,5 @@
 import { settle } from "@tests/app/fakes/day-files";
+import { TODAY } from "@tests/app/fakes/timer";
 import { describe, expect, it } from "vitest";
 import { BoardWriter, type Editor } from "@/app/board/writer";
 import type { EditOutcome } from "@/app/day-editor";
@@ -28,15 +29,9 @@ const interrupt: TimerOp = { kind: "interrupt" };
 
 function setUp() {
   const editor = new FakeEditor();
-  const settled: number[] = [];
   const errors: unknown[] = [];
-  const writer = new BoardWriter(
-    editor,
-    "2026-11-05",
-    () => settled.push(settled.length),
-    (e) => errors.push(e),
-  );
-  return { editor, writer, settled, errors };
+  const writer = new BoardWriter(editor, TODAY, (e) => errors.push(e));
+  return { editor, writer, errors };
 }
 
 describe("BoardWriter", () => {
@@ -49,17 +44,17 @@ describe("BoardWriter", () => {
     expect([await done, await refused]).toEqual([true, false]);
   });
 
-  it("書き込みが終わるまでは書き込み中で、終わるたびに知らせる", async () => {
-    const { editor, writer, settled } = setUp();
+  it("すべての書き込みが終わるまでは書き込み中", async () => {
+    const { editor, writer } = setUp();
     const first = writer.write(interrupt);
     const second = writer.write(interrupt);
     expect(writer.isWriting()).toBe(true);
     editor.finish("done");
     await first;
-    expect([writer.isWriting(), settled.length]).toEqual([true, 1]);
+    expect(writer.isWriting()).toBe(true);
     editor.finish("done");
     await second;
-    expect([writer.isWriting(), settled.length]).toEqual([false, 2]);
+    expect(writer.isWriting()).toBe(false);
   });
 
   it("断られたら、それより前に受けて並んでいる操作は書き込まずに捨てる", async () => {

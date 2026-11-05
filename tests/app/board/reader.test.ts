@@ -4,13 +4,12 @@ import { LatestReader, type ReadResult } from "@/app/board/reader";
 
 const day = "2026-11-05";
 
-function setUp(files: FakeDayFiles, stale = () => false) {
+function setUp(files: FakeDayFiles) {
   const reads: ReadResult[] = [];
   const errors: unknown[] = [];
   const reader = new LatestReader(
     files,
     day,
-    stale,
     (read) => reads.push(read),
     (e) => errors.push(e),
   );
@@ -51,17 +50,6 @@ describe("LatestReader", () => {
     expect(reads).toEqual([{ body: "- [ ] 議事録\n" }]);
   });
 
-  it("古くなっている間に終わった読み込みは捨てる", async () => {
-    let stale = true;
-    const { reader, reads } = setUp(new FakeDayFiles(), () => stale);
-    reader.reload();
-    await settle();
-    stale = false;
-    reader.reload();
-    await settle();
-    expect(reads).toHaveLength(1);
-  });
-
   it("受け取る側の例外は onError へ渡し、次の読み込みも渡す", async () => {
     const files = new FakeDayFiles();
     const errors: unknown[] = [];
@@ -69,7 +57,6 @@ describe("LatestReader", () => {
     const reader = new LatestReader(
       files,
       day,
-      () => false,
       () => {
         calls++;
         throw new Error("解釈できない");

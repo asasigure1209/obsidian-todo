@@ -196,14 +196,12 @@ src/
     clock.ts              現在時刻の取得元の型（実体は adapters/clock.ts）
     notifier.ts           利用者への知らせの型（実体は adapters/notifier.ts）
     day.ts                日付のキーと、その日にできる操作（design 8.3）
-    board.ts              本文から3列の表示用モデルと、計測中のカードを作る（AD-2）
+    board.ts              本文とタイマーから3列の表示用モデルと、計測中のカードを作る（AD-2）
     work-draft.ts         M2 の下書き（保存するまでの行の追加・変更・削除と、保存する変更）
     day-files.ts          その日のファイルの取得元の型（実体は adapters/vault.ts）
   app/
     board/
       session.ts          1日のボードの窓口。ファイルの変更を受けて読み直す（AD-2）。操作を先読みしてから、day-editor に渡す（AD-3）
-      state.ts            ボードに流す状態（読み込み中・ファイルなし・読めない・ボード）と、本文からの組み立て
-      operations.ts       ボードの操作ごとの、その日にできるかの区分とタイマーの遷移
       reader.ts           ファイルを読み直す。追い越されたら最後に始めた読み込みの結果だけを渡す（AD-2）
       writer.ts           書き込みを day-editor の並びに乗せる。断られたら、それより前に受けた操作を捨てる
     day-editor.ts         書き込みを1本に並べ、タイマーを保存してから vault.process で書き戻す。毎秒の満了の判定（AD-6）
