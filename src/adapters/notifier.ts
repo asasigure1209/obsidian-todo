@@ -27,21 +27,22 @@ export const expiryAlarm: Alarm = {
   },
   prepare: () => {
     // 満了のときは本人が画面を見ていないことが多いので、計測を始めたときに許可を尋ねておく
-    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+    if (notificationPermission() === "default") {
       void Notification.requestPermission();
     }
   },
 };
 
-/** 許可されていれば出す。許可は prepare で尋ねてある */
-function showSystemNotification(message: string): void {
-  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-    notifyNow(message);
-  }
+/** OS の通知の許可。通知が使えない環境では undefined */
+function notificationPermission(): NotificationPermission | undefined {
+  return typeof Notification === "undefined" ? undefined : Notification.permission;
 }
 
-/** 通知をクリックすると Obsidian を前面に出す */
-function notifyNow(message: string): void {
+/** 許可されていれば出す（許可は prepare で尋ねてある）。クリックすると Obsidian を前面に出す */
+function showSystemNotification(message: string): void {
+  if (notificationPermission() !== "granted") {
+    return;
+  }
   const notification = new Notification(APP_NAME, { body: message });
   notification.onclick = () => {
     window.focus();

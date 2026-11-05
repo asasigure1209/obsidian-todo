@@ -9,7 +9,7 @@ interface Props {
   status: Status;
   /** 列の中の順番（1から）。今日やるでは優先順として出す */
   position: number;
-  /** このカードを計測中なら、その開始時刻 */
+  /** このカードを計測中なら、その開始時刻と何個目か */
   running: RunningCard | undefined;
   session: BoardSession;
 }
@@ -33,7 +33,7 @@ const { card, status, position, running, session }: Props = $props();
     </p>
     {#if status === "doing"}
       {#if running}
-        <Timer startedAt={running.startedAt} count={card.pomodoros + 1} />
+        <Timer startedAt={running.startedAt} count={running.count} />
         <div class="actions">
           <button type="button" onclick={() => void session.interrupt()}>中断（割り込み）</button>
           <button type="button" class="mod-cta" onclick={() => void session.complete(card.ref)}>

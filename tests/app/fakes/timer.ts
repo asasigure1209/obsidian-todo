@@ -1,10 +1,27 @@
 import type { Clock } from "@/domain/clock";
-import type { Timer } from "@/domain/timer";
+import type { Alarm } from "@/domain/notifier";
+import type { RunningTimer, Timer } from "@/domain/timer";
 import type { TimerStore } from "@/domain/timer-store";
 
-/** 進め方を操作できる時計。2026-11-05 9:00 から始まる */
+/** テストの「今日」と、時計が始まる時刻（2026-11-05 9:00） */
+export const TODAY = "2026-11-05";
+export const NINE = new Date(2026, 10, 5, 9, 0).getTime();
+
+/** 今日の 9:00 から計測しているタイマー */
+export const runningTimer = (
+  text: string,
+  overrides: Partial<RunningTimer> = {},
+): RunningTimer => ({
+  dayKey: TODAY,
+  startedAt: NINE,
+  text,
+  held: false,
+  ...overrides,
+});
+
+/** 進め方を操作できる時計。今日の 9:00 から始まる */
 export class FakeClock implements Clock {
-  private current = new Date(2026, 10, 5, 9, 0).getTime();
+  private current = NINE;
 
   now(): Date {
     return new Date(this.current);
@@ -18,9 +35,7 @@ export class FakeClock implements Clock {
 /** メモリ上の保存先。保存した順に saved に残す */
 export class FakeTimerStore implements TimerStore {
   saved: Timer[] = [];
-  /** true の間、保存は失敗する */
-  failing = false;
-  /** この回数だけ保存した後は、保存が失敗する */
+  /** この回数だけ保存した後は、保存が失敗する（0 ならすぐに失敗する） */
   failAfterSaves: number | undefined;
 
   constructor(private timer: Timer = undefined) {}
@@ -30,7 +45,7 @@ export class FakeTimerStore implements TimerStore {
   }
 
   async save(timer: Timer): Promise<void> {
-    if (this.failing || this.saved.length >= (this.failAfterSaves ?? Number.POSITIVE_INFINITY)) {
+    if (this.saved.length >= (this.failAfterSaves ?? Number.POSITIVE_INFINITY)) {
       throw new Error("保存できない");
     }
     this.timer = timer;
@@ -39,5 +54,19 @@ export class FakeTimerStore implements TimerStore {
 
   current(): Timer {
     return this.timer;
+  }
+}
+
+/** 満了の知らせを記録する */
+export class FakeAlarm implements Alarm {
+  rings: string[] = [];
+  prepares = 0;
+
+  ring(message: string): void {
+    this.rings.push(message);
+  }
+
+  prepare(): void {
+    this.prepares++;
   }
 }

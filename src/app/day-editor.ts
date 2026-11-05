@@ -2,10 +2,11 @@ import type { Clock } from "@/domain/clock";
 import { applyToBody, isRejection, type Rejection } from "@/domain/commands";
 import type { DayFiles } from "@/domain/day-files";
 import { parseDocument, parseTodoLine } from "@/domain/document";
-import { POMODORO_MINUTES } from "@/domain/minutes";
 import type { Alarm, Notifier } from "@/domain/notifier";
 import {
+  isDue,
   type RunningTimer,
+  startsTimer,
   stepTimer,
   type Timer,
   type TimerOp,
@@ -37,7 +38,6 @@ const expiredMessage = (text: string) =>
 const DISCARDED_MESSAGE =
   "着手中のカードが見つからないため、計測を取りやめました（記録していません）";
 const missingMessage = (dayKey: string) => `${dayKey} のファイルがありません`;
-const POMODORO_MS = POMODORO_MINUTES * 60_000;
 
 class Refused extends Error {
   constructor(readonly userMessage: string) {
@@ -60,6 +60,7 @@ export async function openDayEditor(deps: EditorDeps): Promise<DayEditor> {
 export class DayEditor {
   private queue: Promise<unknown> = Promise.resolve();
   private expiring = false;
+  private recheckQueued = false;
   private closed = false;
   private stopWatching: () => void = () => {};
   private watchedDay: string | undefined;
@@ -90,8 +91,7 @@ export class DayEditor {
   /** 毎秒呼ぶ。25分たっていれば確定する。確定の途中の判定は重ねず、保留中は読み直しに任せる */
   tick(): void {
     const timer = this.timer;
-    const due = timer && !timer.held && this.now() - timer.startedAt >= POMODORO_MS;
-    if (this.closed || this.expiring || !due) {
+    if (this.closed || this.expiring || !isDue(timer, this.now())) {
       return;
     }
     this.expiring = true;
@@ -227,10 +227,19 @@ export class DayEditor {
       : () => {};
   }
 
+  /**
+   * 編集中は変更が続くので、読み直しは並びに1つだけ置く。
+   * 順番が来て読み始めた時点で印を外すので、その後の変更はまた読み直す
+   */
   private recheck(dayKey: string): void {
-    if (this.timer?.held) {
-      void this.edit(dayKey, { kind: "recheck" });
+    if (!this.timer?.held || this.recheckQueued) {
+      return;
     }
+    this.recheckQueued = true;
+    void this.edit(dayKey, { kind: "recheck" }, () => {
+      this.recheckQueued = false;
+      return true;
+    });
   }
 
   private now(): number {
@@ -238,11 +247,14 @@ export class DayEditor {
   }
 }
 
-/** 新しく計測を始める操作か */
-function startsTimer(op: TimerOp): boolean {
-  return (op.kind === "move" && op.status === "doing") || op.kind === "next";
-}
-
 function sameTimer(a: Timer, b: Timer): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  return (
+    a === b ||
+    (a !== undefined &&
+      b !== undefined &&
+      a.dayKey === b.dayKey &&
+      a.startedAt === b.startedAt &&
+      a.text === b.text &&
+      a.held === b.held)
+  );
 }

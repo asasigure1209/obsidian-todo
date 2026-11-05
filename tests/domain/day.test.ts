@@ -14,12 +14,16 @@ describe("toDayKey", () => {
 describe("canEdit（design 8.3）", () => {
   const today = "2026-11-05";
 
-  it.each(["move", "complete", "add", "work"] as const)("今日は「%s」ができる", (kind) => {
-    expect(canEdit(kind, today, today)).toBe(true);
-  });
+  it.each(["move", "complete", "add", "work", "interrupt"] as const)(
+    "今日は「%s」ができる",
+    (kind) => {
+      expect(canEdit(kind, today, today)).toBe(true);
+    },
+  );
 
-  it("過去の日は作業時間の修正だけができる", () => {
+  it("過去の日は作業時間の修正と、計測の中断だけができる", () => {
     expect(canEdit("work", "2026-11-04", today)).toBe(true);
+    expect(canEdit("interrupt", "2026-11-04", today)).toBe(true);
     expect(canEdit("move", "2026-11-04", today)).toBe(false);
     expect(canEdit("complete", "2025-12-31", today)).toBe(false);
     expect(canEdit("add", "2026-11-04", today)).toBe(false);
@@ -27,6 +31,7 @@ describe("canEdit（design 8.3）", () => {
 
   it("未来の日は何もできない", () => {
     expect(canEdit("work", "2026-11-06", today)).toBe(false);
+    expect(canEdit("interrupt", "2026-11-06", today)).toBe(false);
     expect(canEdit("move", "2027-01-01", today)).toBe(false);
   });
 });

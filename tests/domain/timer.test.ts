@@ -2,7 +2,14 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { isRejection, type LineRef } from "@/domain/commands";
 import { parseDocument, parseWorkEntry, serializeDocument, todoBlocks } from "@/domain/document";
-import { parseTimer, type RunningTimer, stepTimer, type Timer, type TimerOp } from "@/domain/timer";
+import {
+  parseTimer,
+  type RunningTimer,
+  startsTimer,
+  stepTimer,
+  type Timer,
+  type TimerOp,
+} from "@/domain/timer";
 import { markdownLike } from "./arbitraries";
 
 const day = "2026-11-05";
@@ -409,5 +416,16 @@ describe("parseTimer（保存領域から読んだ値）", () => {
 
   it("余分な項目は読まない", () => {
     expect(parseTimer({ ...running(), extra: 1 })).toEqual(running());
+  });
+});
+
+describe("startsTimer", () => {
+  it("着手中へ動かす操作と「次のポモドーロを開始」だけが、新しく計測を始める", () => {
+    expect(startsTimer({ kind: "move", card: review, status: "doing", position: 0 })).toBe(true);
+    expect(startsTimer({ kind: "next", card: proposal })).toBe(true);
+    expect(startsTimer({ kind: "move", card: review, status: "done", position: 0 })).toBe(false);
+    expect(startsTimer({ kind: "move", card: review, status: "todo", position: 0 })).toBe(false);
+    expect(startsTimer({ kind: "complete", card: proposal })).toBe(false);
+    expect(startsTimer({ kind: "interrupt" })).toBe(false);
   });
 });

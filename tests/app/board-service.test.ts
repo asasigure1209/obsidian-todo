@@ -3,10 +3,10 @@ import { type BoardSession, type BoardState, openBoard } from "@/app/board-servi
 import { DayEditor } from "@/app/day-editor";
 import type { LineRef } from "@/domain/commands";
 import type { Timer } from "@/domain/timer";
-import { FakeDayFiles } from "./fakes/day-files";
-import { FakeClock, FakeTimerStore } from "./fakes/timer";
+import { FakeDayFiles, settle } from "./fakes/day-files";
+import { FakeAlarm, FakeClock, FakeTimerStore, NINE, runningTimer, TODAY } from "./fakes/timer";
 
-const today = "2026-11-05";
+const today = TODAY;
 const yesterday = "2026-11-04";
 
 /** 受け取った状態を、比べやすい形で並べる。ボードは列ごとのカード名 */
@@ -39,7 +39,7 @@ function open(files: FakeDayFiles, dayKey = today, timer: Timer = undefined): Op
       store: new FakeTimerStore(timer),
       clock,
       notifier,
-      alarm: { ring: () => {}, prepare: () => {} },
+      alarm: new FakeAlarm(),
       onError,
     },
     timer,
@@ -52,9 +52,6 @@ function open(files: FakeDayFiles, dayKey = today, timer: Timer = undefined): Op
 
 /** n 番目の TODO ブロックを、その行の文字列とともに指す */
 const card = (index: number, text: string): LineRef => ({ index, text });
-
-/** 待っている読み込みと書き込みを終わらせる */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("openBoard：読み直し", () => {
   it("購読するとすぐに読み込み中を受け取る", () => {
@@ -432,8 +429,8 @@ describe("openBoard：カードを動かす", () => {
 describe("openBoard：タイマー", () => {
   const body = "- [/] 提案資料\n- [ ] レビュー対応\n";
   const proposal = card(0, "- [/] 提案資料");
-  const nine = new Date(2026, 10, 5, 9, 0).getTime();
-  const running = { dayKey: today, startedAt: nine, text: proposal.text, held: false };
+  const nine = NINE;
+  const running = runningTimer(proposal.text);
 
   it("計測中のカードを示す", async () => {
     const files = new FakeDayFiles();
@@ -445,7 +442,7 @@ describe("openBoard：タイマー", () => {
 
     expect(received.at(-1)).toMatchObject({
       kind: "board",
-      running: { key: "- [/] 提案資料#0", startedAt: nine },
+      running: { key: "- [/] 提案資料#0", startedAt: nine, count: 1 },
     });
   });
 

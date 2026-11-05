@@ -1,5 +1,5 @@
 <script lang="ts">
-import { POMODORO_MINUTES } from "@/domain/minutes";
+import { MINUTE_MS, POMODORO_MS } from "@/domain/minutes";
 
 interface Props {
   startedAt: number;
@@ -9,7 +9,6 @@ interface Props {
 
 const { startedAt, count }: Props = $props();
 
-const TOTAL_MS = POMODORO_MINUTES * 60_000;
 const RADIUS = 26;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
@@ -23,10 +22,10 @@ $effect(() => {
   return () => window.clearInterval(id);
 });
 
-const remaining = $derived(Math.min(TOTAL_MS, Math.max(0, TOTAL_MS - (now - startedAt))));
+const remaining = $derived(Math.min(POMODORO_MS, Math.max(0, POMODORO_MS - (now - startedAt))));
 const label = $derived(
-  `${String(Math.floor(remaining / 60_000)).padStart(2, "0")}:${String(
-    Math.floor((remaining % 60_000) / 1000),
+  `${String(Math.floor(remaining / MINUTE_MS)).padStart(2, "0")}:${String(
+    Math.floor((remaining % MINUTE_MS) / 1000),
   ).padStart(2, "0")}`,
 );
 </script>
@@ -40,7 +39,7 @@ const label = $derived(
       cy="32"
       r={RADIUS}
       stroke-dasharray={CIRCUMFERENCE}
-      stroke-dashoffset={CIRCUMFERENCE * (1 - remaining / TOTAL_MS)}
+      stroke-dashoffset={CIRCUMFERENCE * (1 - remaining / POMODORO_MS)}
     />
   </svg>
   <div class="text">

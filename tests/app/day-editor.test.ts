@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { DayEditor } from "@/app/day-editor";
 import type { LineRef } from "@/domain/commands";
 import type { RunningTimer, Timer } from "@/domain/timer";
-import { FakeDayFiles } from "./fakes/day-files";
-import { FakeClock, FakeTimerStore } from "./fakes/timer";
+import { FakeDayFiles, settle } from "./fakes/day-files";
+import { FakeAlarm, FakeClock, FakeTimerStore, NINE, runningTimer, TODAY } from "./fakes/timer";
 
-const today = "2026-11-05";
+const today = TODAY;
 const yesterday = "2026-11-04";
-const nine = new Date(2026, 10, 5, 9, 0).getTime();
+const nine = NINE;
 
 const body = `- [/] 提案資料
     - 25分 ポモドーロ
@@ -16,13 +16,7 @@ const body = `- [/] 提案資料
 const proposal: LineRef = { index: 0, text: "- [/] 提案資料" };
 const review: LineRef = { index: 1, text: "- [ ] レビュー対応" };
 
-const running = (overrides: Partial<RunningTimer> = {}): RunningTimer => ({
-  dayKey: today,
-  startedAt: nine,
-  text: proposal.text,
-  held: false,
-  ...overrides,
-});
+const running = (overrides: Partial<RunningTimer> = {}) => runningTimer(proposal.text, overrides);
 
 /** 偽物をつないだ DayEditor。受け取ったタイマー・通知・音・例外を記録する */
 function setup(timer: Timer = undefined) {
@@ -32,28 +26,20 @@ function setup(timer: Timer = undefined) {
   const store = new FakeTimerStore(timer);
   const notices: string[] = [];
   const errors: unknown[] = [];
-  const alarms: string[] = [];
-  let prepares = 0;
+  const alarm = new FakeAlarm();
   const editor = new DayEditor(
     {
       files,
       store,
       clock,
       notifier: { notify: (message) => notices.push(message) },
-      alarm: {
-        ring: (message) => alarms.push(message),
-        prepare: () => {
-          prepares++;
-        },
-      },
+      alarm,
       onError: (error) => errors.push(error),
     },
     timer,
   );
-  return { files, clock, store, notices, errors, editor, alarms, prepares: () => prepares };
+  return { files, clock, store, notices, errors, editor, alarm };
 }
-
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("DayEditor：操作", () => {
   it("保存してあったタイマーを今のタイマーとして持つ", () => {
@@ -215,13 +201,13 @@ describe("DayEditor：操作", () => {
   });
 
   it("計測を始めたときに、満了を知らせる準備をする（OS の通知の許可を尋ねる）", async () => {
-    const { editor, prepares } = setup();
+    const { editor, alarm } = setup();
 
     await editor.edit(today, { kind: "next", card: proposal });
     await editor.edit(today, { kind: "move", card: review, status: "done", position: 0 });
     await editor.edit(today, { kind: "interrupt" });
 
-    expect(prepares()).toBe(1);
+    expect(alarm.prepares).toBe(1);
   });
 
   it("ほかの日のタイマーの対象が見つからず中断を記録できなければ、捨てて知らせてから計測を始める", async () => {
@@ -239,7 +225,7 @@ describe("DayEditor：操作", () => {
   it("タイマーを保存できなければ、書き込まずに知らせ、今のタイマーも変えない", async () => {
     const { files, clock, store, editor, notices, errors } = setup(running());
     clock.advance(7);
-    store.failing = true;
+    store.failAfterSaves = 0;
 
     expect(await editor.edit(today, { kind: "interrupt" })).toBe("refused");
 
@@ -276,7 +262,7 @@ describe("DayEditor：操作", () => {
 
 describe("DayEditor：毎秒の満了の判定", () => {
   it("25分たつと記録して止め、カードの名前を添えて満了を知らせる（通知は Alarm だけ）", async () => {
-    const { files, clock, editor, store, notices, alarms } = setup(running());
+    const { files, clock, editor, store, notices, alarm } = setup(running());
     clock.advance(25);
 
     editor.tick();
@@ -284,7 +270,7 @@ describe("DayEditor：毎秒の満了の判定", () => {
 
     expect(files.body(today)).toContain("    - 25分 ポモドーロ\n    - 25分 ポモドーロ\n");
     expect(store.current()).toBeUndefined();
-    expect(alarms).toEqual(["25分たちました。「提案資料」にポモドーロを記録しました"]);
+    expect(alarm.rings).toEqual(["25分たちました。「提案資料」にポモドーロを記録しました"]);
     expect(notices).toEqual([]);
   });
 
@@ -324,7 +310,7 @@ describe("DayEditor：毎秒の満了の判定", () => {
   it("満了の判定でタイマーを保存できなくても、例外を onError に渡す", async () => {
     const { clock, editor, store, errors } = setup(running());
     clock.advance(25);
-    store.failing = true;
+    store.failAfterSaves = 0;
 
     editor.tick();
     await settle();
@@ -370,6 +356,47 @@ describe("DayEditor：毎秒の満了の判定", () => {
     files.write(yesterday, body);
     await settle();
     expect(files.reads).toBe(0);
+  });
+
+  it("保留中の読み直しは並びに1つだけ置く", async () => {
+    const { files, editor } = setup(running({ held: true }));
+    const renamed = body.replace("提案資料", "提案資料の構成");
+    files.hold();
+
+    files.write(today, renamed);
+    files.write(today, renamed);
+    files.write(today, renamed);
+    for (let i = 0; i < 4; i++) {
+      await settle();
+      files.release(i);
+    }
+    await settle();
+    editor.close();
+
+    // 3回とも1つ目の読み直しが読み始める前の変更なので、読むのは最新の本文の1回だけ
+    expect(files.reads).toBe(1);
+  });
+
+  it("一度読み直した後の変更でも、また読み直す", async () => {
+    const { files, store } = setup(running({ held: true }));
+
+    files.write(today, body.replace("提案資料", "提案資料の構成"));
+    await settle();
+    await settle();
+    files.write(today, body);
+    await settle();
+    await settle();
+
+    expect(store.current()).toEqual(running());
+  });
+
+  it("計測中のカードで計測を始め直すと、新しい開始時刻を保存する", async () => {
+    const { clock, editor, store } = setup(running());
+    clock.advance(5);
+
+    await editor.edit(today, { kind: "next", card: proposal });
+
+    expect(store.current()).toEqual(running({ startedAt: nine + 5 * 60_000 }));
   });
 
   it("保留中でなければ、ファイルが変わっても読み直さない", async () => {

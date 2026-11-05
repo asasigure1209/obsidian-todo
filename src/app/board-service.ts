@@ -1,28 +1,23 @@
 import type { DayEditor } from "@/app/day-editor";
 import { type Board, toBoard } from "@/domain/board";
 import type { Clock } from "@/domain/clock";
-import {
-  completeCard,
-  type DocumentCommand,
-  isRejection,
-  type LineRef,
-  moveCard,
-} from "@/domain/commands";
+import { isRejection, type LineRef } from "@/domain/commands";
 import { canEdit, type EditKind, toDayKey } from "@/domain/day";
 import type { DayFiles } from "@/domain/day-files";
 import { type DayDocument, parseDocument, type Status } from "@/domain/document";
 import type { Notifier } from "@/domain/notifier";
-import { findTarget, type TimerOp } from "@/domain/timer";
+import { type RunningTarget, runningTarget, stepTimer, type TimerOp } from "@/domain/timer";
 
 /** Svelte のストアの約束と同じ形。subscribe はすぐに今の値を渡し、戻り値で購読をやめる */
 export interface Readable<T> {
   subscribe(run: (value: T) => void): () => void;
 }
 
-/** 計測中のカード。key は Card.key、startedAt から残り時間を出す */
+/** 計測中のカード。key は Card.key、startedAt から残り時間を出す。count は何個目のポモドーロか */
 export interface RunningCard {
   key: string;
   startedAt: number;
+  count: number;
 }
 
 export type BoardState =
@@ -98,18 +93,15 @@ class Session implements BoardSession {
   }
 
   move(card: LineRef, status: Status, position: number): Promise<void> {
-    return this.edit("move", { kind: "move", card, status, position }, (doc) =>
-      moveCard(doc, card, status, position),
-    );
+    return this.edit("move", { kind: "move", card, status, position });
   }
 
   complete(card: LineRef): Promise<void> {
-    return this.edit("complete", { kind: "complete", card }, (doc) => completeCard(doc, card));
+    return this.edit("complete", { kind: "complete", card });
   }
 
-  /** 経過分を記録するだけなので、作業時間の修正として扱う。日付をまたいで過去の日になったボードでも、その日の計測を止められる */
   interrupt(): Promise<void> {
-    return this.edit("work", { kind: "interrupt" });
+    return this.edit("interrupt", { kind: "interrupt" });
   }
 
   next(card: LineRef): Promise<void> {
@@ -121,7 +113,7 @@ class Session implements BoardSession {
     this.stopListening();
   }
 
-  private edit(kind: EditKind, op: TimerOp, preview?: DocumentCommand): Promise<void> {
+  private edit(kind: EditKind, op: TimerOp): Promise<void> {
     if (this.closed) {
       return Promise.resolve();
     }
@@ -130,9 +122,7 @@ class Session implements BoardSession {
       return Promise.resolve();
     }
     const epoch = this.epoch;
-    if (preview) {
-      this.preview(preview);
-    }
+    this.preview(op);
     this.pendingWrites++;
     return this.deps.editor
       .edit(this.dayKey, op, () => epoch === this.epoch)
@@ -149,9 +139,14 @@ class Session implements BoardSession {
     this.reload();
   }
 
-  /** 断られる操作は先読みしない。書き込みで改めて断られ、そこで知らせる */
-  private preview(command: DocumentCommand): void {
-    const next = this.doc && command(this.doc);
+  /**
+   * 書き込みと同じ stepTimer を最後に読んだ本文に当てて、結果をすぐに流す（記録の行も含む）。
+   * 断られる操作は先読みしない。書き込みで改めて断られ、そこで知らせる
+   */
+  private preview(op: TimerOp): void {
+    const now = this.deps.clock.now().getTime();
+    const next =
+      this.doc && stepTimer(this.deps.editor.current(), this.doc, this.dayKey, op, now).result;
     if (next && !isRejection(next)) {
       this.doc = next;
       this.emit(this.toState(next));
@@ -190,13 +185,8 @@ class Session implements BoardSession {
    */
   private toState(doc: DayDocument): BoardState {
     const board = toBoard(doc);
-    const timer = this.deps.editor.current();
-    const own = timer?.dayKey === this.dayKey ? timer : undefined;
-    const target = own && findTarget(doc, own);
-    const card = target && board.doing.find((c) => c.ref.index === target.index);
-    return card && own
-      ? { kind: "board", board, running: { key: card.key, startedAt: own.startedAt } }
-      : { kind: "board", board };
+    const running = runningCard(board, runningTarget(this.deps.editor.current(), doc, this.dayKey));
+    return running ? { kind: "board", board, running } : { kind: "board", board };
   }
 
   /** 1つの受け取り手の例外で、ほかの受け取り手を止めない */
@@ -210,6 +200,14 @@ class Session implements BoardSession {
       }
     }
   }
+}
+
+/** 計測中の対象のカード。「何個目」は、そのカードのポモドーロの行の数＋1 */
+function runningCard(board: Board, running: RunningTarget | undefined): RunningCard | undefined {
+  const card = running && board.doing.find((c) => c.ref.index === running.target.index);
+  return card && running
+    ? { key: card.key, startedAt: running.timer.startedAt, count: card.pomodoros + 1 }
+    : undefined;
 }
 
 /** 読めなかったときは undefined */

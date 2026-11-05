@@ -45,7 +45,7 @@ export type CommandResult = DayDocument | Rejection;
 /** 1回の操作 */
 export type DocumentCommand = (doc: DayDocument) => CommandResult;
 
-const STALE: Rejection = { rejected: "stale" };
+export const STALE: Rejection = { rejected: "stale" };
 const INVALID: Rejection = { rejected: "invalid" };
 const UNSTABLE: Rejection = { rejected: "unstable" };
 const COLUMN_END = Number.POSITIVE_INFINITY;
@@ -134,7 +134,8 @@ export function removeWork(doc: DayDocument, card: LineRef, entry: LineRef): Com
   });
 }
 
-function findCard(doc: DayDocument, card: LineRef): TodoBlock | undefined {
+/** 位置と行の文字列が一致する TODO ブロック。一致しなければ undefined（AD-5） */
+export function findCard(doc: DayDocument, card: LineRef): TodoBlock | undefined {
   const block = todoBlocks(doc.segments)[card.index];
   return block?.head.text === card.text ? block : undefined;
 }
