@@ -55,13 +55,7 @@ export class BoardView extends ItemView {
     this.session = session;
     this.board = mount(Board, {
       target: this.contentEl,
-      props: {
-        dayKey,
-        boardState: session,
-        onMove: (card, status, position) => {
-          void session.move(card, status, position);
-        },
-      },
+      props: { dayKey, session },
     });
   }
 

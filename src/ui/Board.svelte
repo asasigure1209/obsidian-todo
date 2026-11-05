@@ -1,27 +1,31 @@
 <script lang="ts">
-import type { BoardState, Readable } from "@/app/board-service";
-import type { LineRef } from "@/domain/commands";
-import type { Status } from "@/domain/document";
+import type { BoardSession } from "@/app/board-service";
 import Column from "./Column.svelte";
 import type { Drop } from "./sortable";
 
 interface Props {
   dayKey: string;
-  boardState: Readable<BoardState>;
-  onMove: (card: LineRef, status: Status, position: number) => void;
+  /** 表示する状態（ストア）と、ボードからの操作の窓口 */
+  session: BoardSession;
 }
 
-const { dayKey, boardState, onMove }: Props = $props();
+const { dayKey, session }: Props = $props();
+
+const COLUMNS = [
+  ["todo", "今日やる"],
+  ["doing", "着手中"],
+  ["done", "完了"],
+] as const;
 
 /** ドロップしたカードを key から探し、そのときのボードの ref で動かす */
 function handleDrop(drop: Drop): void {
-  if ($boardState.kind !== "board") {
+  if ($session.kind !== "board") {
     return;
   }
-  const { todo, doing, done } = $boardState.board;
+  const { todo, doing, done } = $session.board;
   const card = [...todo, ...doing, ...done].find((c) => c.key === drop.key);
   if (card) {
-    onMove(card.ref, drop.status, drop.position);
+    void session.move(card.ref, drop.status, drop.position);
   }
 }
 </script>
@@ -31,15 +35,22 @@ function handleDrop(drop: Drop): void {
     <h2>{dayKey}</h2>
   </header>
 
-  {#if $boardState.kind === "board"}
+  {#if $session.kind === "board"}
     <div class="columns">
-      <Column title="今日やる" status="todo" cards={$boardState.board.todo} onDrop={handleDrop} />
-      <Column title="着手中" status="doing" cards={$boardState.board.doing} onDrop={handleDrop} />
-      <Column title="完了" status="done" cards={$boardState.board.done} onDrop={handleDrop} />
+      {#each COLUMNS as [status, title] (status)}
+        <Column
+          {title}
+          {status}
+          {session}
+          cards={$session.board[status]}
+          running={$session.running}
+          onDrop={handleDrop}
+        />
+      {/each}
     </div>
-  {:else if $boardState.kind === "missing"}
+  {:else if $session.kind === "missing"}
     <p class="message">今日のファイルがありません</p>
-  {:else if $boardState.kind === "unreadable"}
+  {:else if $session.kind === "unreadable"}
     <p class="message">今日のファイルを読めませんでした。ファイルを保存し直すと読み直します</p>
   {/if}
 </div>

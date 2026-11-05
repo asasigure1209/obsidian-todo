@@ -1,5 +1,8 @@
 import type { DayFiles } from "@/domain/day-files";
 
+/** 待っている読み込みと書き込みを終わらせる */
+export const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 /**
  * メモリ上の DayFiles。write / remove で変更を知らせる。
  * - hold() の後は読み込みが止まり、release(n) で n 番目の読み込みを好きな順番で終わらせられる
@@ -16,8 +19,11 @@ export class FakeDayFiles implements DayFiles {
   failNextWrite = false;
   /** 始まった書き込みの数 */
   startedWrites = 0;
+  /** 読み込みの数 */
+  reads = 0;
 
   read(dayKey: string): Promise<string | undefined> {
+    this.reads++;
     if (this.failNextRead) {
       this.failNextRead = false;
       return Promise.reject(new Error("読めない"));

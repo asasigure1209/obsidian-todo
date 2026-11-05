@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { type BoardSession, type BoardState, openBoard } from "@/app/board-service";
+import { DayEditor } from "@/app/day-editor";
 import type { LineRef } from "@/domain/commands";
-import { FakeDayFiles } from "./fakes/day-files";
+import type { Timer } from "@/domain/timer";
+import { FakeDayFiles, settle } from "./fakes/day-files";
+import { FakeAlarm, FakeClock, FakeTimerStore, NINE, runningTimer, TODAY } from "./fakes/timer";
 
-const today = "2026-11-05";
+const today = TODAY;
 const yesterday = "2026-11-04";
 
 /** 受け取った状態を、比べやすい形で並べる。ボードは列ごとのカード名 */
@@ -19,31 +22,36 @@ interface Opened {
   states: ReturnType<typeof summary>[];
   notices: string[];
   errors: unknown[];
+  clock: FakeClock;
+  editor: DayEditor;
 }
 
 /** その日のボードを開いて購読し、受け取った状態・通知・例外を記録する。時計は今日の 9:00 */
-function open(files: FakeDayFiles, dayKey = today): Opened {
+function open(files: FakeDayFiles, dayKey = today, timer: Timer = undefined): Opened {
   const notices: string[] = [];
   const errors: unknown[] = [];
-  const session = openBoard(
+  const clock = new FakeClock();
+  const notifier = { notify: (message: string) => notices.push(message) };
+  const onError = (error: unknown) => errors.push(error);
+  const editor = new DayEditor(
     {
       files,
-      clock: { now: () => new Date(2026, 10, 5, 9, 0) },
-      notifier: { notify: (message) => notices.push(message) },
-      onError: (error) => errors.push(error),
+      store: new FakeTimerStore(timer),
+      clock,
+      notifier,
+      alarm: new FakeAlarm(),
+      onError,
     },
-    dayKey,
+    timer,
   );
+  const session = openBoard({ files, clock, notifier, editor, onError }, dayKey);
   const states: ReturnType<typeof summary>[] = [];
   session.subscribe((state) => states.push(summary(state)));
-  return { session, states, notices, errors };
+  return { session, states, notices, errors, clock, editor };
 }
 
 /** n 番目の TODO ブロックを、その行の文字列とともに指す */
 const card = (index: number, text: string): LineRef => ({ index, text });
-
-/** 待っている読み込みと書き込みを終わらせる */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("openBoard：読み直し", () => {
   it("購読するとすぐに読み込み中を受け取る", () => {
@@ -329,7 +337,8 @@ describe("openBoard：カードを動かす", () => {
     files.releaseWrite();
     await settle();
 
-    expect(files.startedWrites).toBe(1);
+    // 1回目は読んだ時点で stale になるので、どちらも書き込みは始まらない
+    expect(files.startedWrites).toBe(0);
     expect(files.body(today)).toBe("- [ ] 先頭に足した\n- [ ] a\n- [ ] b\n");
     expect(notices).toEqual(["ファイルが変わっていたので、操作を取りやめて読み直しました"]);
     expect(states.at(-1)).toEqual(["先頭に足した,a,b", "", ""]);
@@ -414,5 +423,147 @@ describe("openBoard：カードを動かす", () => {
     expect(files.startedWrites).toBe(0);
     expect(states.at(-1)).toEqual(["a,b", "", "c"]);
     expect(notices).toEqual([]);
+  });
+});
+
+describe("openBoard：タイマー", () => {
+  const body = "- [/] 提案資料\n- [ ] レビュー対応\n";
+  const proposal = card(0, "- [/] 提案資料");
+  const nine = NINE;
+  const running = runningTimer(proposal.text);
+
+  it("計測中のカードを示す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const received: BoardState[] = [];
+    const { session } = open(files, today, running);
+    session.subscribe((state) => received.push(state));
+    await settle();
+
+    expect(received.at(-1)).toMatchObject({
+      kind: "board",
+      running: { key: "- [/] 提案資料#0", startedAt: nine, count: 1 },
+    });
+  });
+
+  it("着手中へ動かすと計測が始まり、計測中のカードとして示す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const received: BoardState[] = [];
+    const { session } = open(files);
+    session.subscribe((state) => received.push(state));
+    await settle();
+
+    await session.move(card(1, "- [ ] レビュー対応"), "doing", 0);
+    await settle();
+
+    expect(received.at(-1)).toMatchObject({ running: { key: "- [/] レビュー対応#0" } });
+  });
+
+  it("「中断」で経過分を記録して止め、計測中のカードを示さなくなる", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const received: BoardState[] = [];
+    const { session, clock } = open(files, today, running);
+    session.subscribe((state) => received.push(state));
+    await settle();
+    clock.advance(8);
+
+    await session.interrupt();
+    await settle();
+
+    expect(files.body(today)).toBe("- [/] 提案資料\n    - 8分 中断\n- [ ] レビュー対応\n");
+    expect(received.at(-1)).not.toHaveProperty("running");
+  });
+
+  it("「次のポモドーロを開始」で計測を始め、「完了にする」で記録して完了へ動かす", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session, clock, states } = open(files);
+    await settle();
+
+    await session.next(proposal);
+    clock.advance(20);
+    await session.complete(proposal);
+    await settle();
+
+    expect(files.body(today)).toBe("- [ ] レビュー対応\n- [x] 提案資料\n    - 20分 ポモドーロ\n");
+    expect(states.at(-1)).toEqual(["レビュー対応", "", "提案資料"]);
+  });
+
+  it("ほかの日のタイマーは、この日のボードでは計測中として示さない", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const received: BoardState[] = [];
+    const { session } = open(files, today, { ...running, dayKey: yesterday });
+    session.subscribe((state) => received.push(state));
+    await settle();
+
+    expect(received.at(-1)).not.toHaveProperty("running");
+  });
+
+  it("過去の日のボードでは計測を始められない", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, body);
+    const { session, notices } = open(files, yesterday);
+    await settle();
+
+    await session.next(proposal);
+
+    expect(files.startedWrites).toBe(0);
+    expect(notices).toEqual(["過去の日は、作業時間の修正だけができます"]);
+  });
+
+  it("日付をまたいで過去の日になったボードでも、その日の計測は「中断」で止めて記録できる", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, body);
+    const { session, notices, clock } = open(files, yesterday, { ...running, dayKey: yesterday });
+    await settle();
+    clock.advance(5);
+
+    await session.interrupt();
+
+    expect(files.body(yesterday)).toContain("    - 5分 中断\n");
+    expect(notices).toEqual([]);
+  });
+
+  it("保留中のタイマーでも、対象が見つかれば計測中のカードとして示す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body.replace("提案資料", "提案資料の構成"));
+    const received: BoardState[] = [];
+    const { session } = open(files, today, { ...running, held: true });
+    session.subscribe((state) => received.push(state));
+    await settle();
+
+    files.write(today, body);
+    await settle();
+    await settle();
+
+    expect(received.at(-1)).toMatchObject({ running: { key: "- [/] 提案資料#0" } });
+  });
+
+  it("「完了にする」と、書き込みを待たずに完了の列へ出す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session, states } = open(files);
+    await settle();
+    files.holdWrites();
+
+    void session.complete(proposal);
+
+    expect(states.at(-1)).toEqual(["レビュー対応", "", "提案資料"]);
+  });
+
+  it("閉じた後は、タイマーが変わっても受け取らない", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session, states, editor } = open(files);
+    await settle();
+    const count = states.length;
+
+    session.close();
+    await editor.edit(today, { kind: "next", card: proposal });
+
+    expect(states).toHaveLength(count);
   });
 });

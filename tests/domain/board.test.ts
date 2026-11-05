@@ -60,6 +60,18 @@ describe("toBoard", () => {
     expect(todo[0]?.workedMinutes).toBe(0);
   });
 
+  it("ポモドーロの数は、種類がポモドーロの作業時間の行の数", () => {
+    const body = `- [/] メールの返信
+    - 25分 ポモドーロ
+    - 12分 中断
+    - 25分 手動
+\t- 10分 ポモドーロ
+    - 5分 ポモドーロ
+`;
+
+    expect(boardOf(body).doing[0]?.pomodoros).toBe(3);
+  });
+
   it("固定行と書式外の TODO はカードにならない", () => {
     const b = boardOf("朝のメモ\n* [ ] 別の書式\n- [X] 大文字\n\n- [ ] a\n");
 
