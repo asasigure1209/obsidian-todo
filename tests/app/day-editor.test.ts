@@ -32,19 +32,19 @@ function setup(timer: Timer = undefined) {
   const store = new FakeTimerStore(timer);
   const notices: string[] = [];
   const errors: unknown[] = [];
-  let rings = 0;
+  const alarms: string[] = [];
   const editor = new DayEditor(
     {
       files,
       store,
       clock,
       notifier: { notify: (message) => notices.push(message) },
-      alarm: { ring: () => rings++ },
+      alarm: { ring: (message) => alarms.push(message) },
       onError: (error) => errors.push(error),
     },
     timer,
   );
-  return { files, clock, store, notices, errors, editor, rings: () => rings };
+  return { files, clock, store, notices, errors, editor, alarms };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -222,8 +222,8 @@ describe("DayEditor：操作", () => {
 });
 
 describe("DayEditor：毎秒の満了の判定", () => {
-  it("25分たつと記録して止め、知らせて音を鳴らす", async () => {
-    const { files, clock, editor, store, notices, rings } = setup(running());
+  it("25分たつと記録して止め、カードの名前を添えて満了を知らせる（通知は Alarm だけ）", async () => {
+    const { files, clock, editor, store, notices, alarms } = setup(running());
     clock.advance(25);
 
     editor.tick();
@@ -231,8 +231,8 @@ describe("DayEditor：毎秒の満了の判定", () => {
 
     expect(files.body(today)).toContain("    - 25分 ポモドーロ\n    - 25分 ポモドーロ\n");
     expect(store.current()).toBeUndefined();
-    expect(notices).toEqual(["25分たちました。ポモドーロを記録しました"]);
-    expect(rings()).toBe(1);
+    expect(alarms).toEqual(["25分たちました。「提案資料」にポモドーロを記録しました"]);
+    expect(notices).toEqual([]);
   });
 
   it("25分前は何もしない", async () => {

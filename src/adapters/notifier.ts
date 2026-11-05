@@ -1,29 +1,68 @@
 import { Notice } from "obsidian";
 import type { Alarm, Notifier } from "@/domain/notifier";
 
-/** Obsidian 内の通知 */
+/** Obsidian 内の通知。数秒で消える */
 export const noticeNotifier: Notifier = {
   notify: (message) => {
     new Notice(message);
   },
 };
 
+/** OS の通知に出す名前（manifest.json の name） */
+const APP_NAME = "Daily Kanban TODO";
 const BEEP_SECONDS = 0.6;
 
-/** 音声ファイルを同梱せず、ブラウザの音声機能で短い音を鳴らす（architecture 6章） */
-export const beepAlarm: Alarm = {
-  ring: () => {
-    const context = new AudioContext();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.frequency.value = 880;
-    gain.gain.setValueAtTime(0.2, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + BEEP_SECONDS);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.onended = () => {
-      void context.close();
-    };
-    oscillator.start();
-    oscillator.stop(context.currentTime + BEEP_SECONDS);
+/**
+ * 25分の満了の知らせ。Obsidian が背面にあっても気づけるよう、次の3つで知らせる（design 8.1）
+ * - クリックするまで消えない Obsidian 内の通知
+ * - OS の通知（macOS の通知センターなど）
+ * - 短い音
+ */
+export const expiryAlarm: Alarm = {
+  ring: (message) => {
+    // 表示の時間を 0 にすると、クリックするまで消えない
+    new Notice(message, 0);
+    showSystemNotification(message);
+    beep();
   },
 };
+
+/** 許可が決まっていなければ、最初の1回だけ尋ねる。断られていれば出さない */
+function showSystemNotification(message: string): void {
+  if (typeof Notification === "undefined" || Notification.permission === "denied") {
+    return;
+  }
+  if (Notification.permission === "granted") {
+    notifyNow(message);
+    return;
+  }
+  void Notification.requestPermission().then((permission) => {
+    if (permission === "granted") {
+      notifyNow(message);
+    }
+  });
+}
+
+/** 通知をクリックすると Obsidian を前面に出す */
+function notifyNow(message: string): void {
+  const notification = new Notification(APP_NAME, { body: message });
+  notification.onclick = () => {
+    window.focus();
+  };
+}
+
+/** 音声ファイルを同梱せず、ブラウザの音声機能で短い音を鳴らす */
+function beep(): void {
+  const context = new AudioContext();
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.frequency.value = 880;
+  gain.gain.setValueAtTime(0.2, context.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + BEEP_SECONDS);
+  oscillator.connect(gain).connect(context.destination);
+  oscillator.onended = () => {
+    void context.close();
+  };
+  oscillator.start();
+  oscillator.stop(context.currentTime + BEEP_SECONDS);
+}

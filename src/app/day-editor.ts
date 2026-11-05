@@ -1,7 +1,7 @@
 import type { Clock } from "@/domain/clock";
 import { applyToBody, isRejection, type Rejection } from "@/domain/commands";
 import type { DayFiles } from "@/domain/day-files";
-import { parseDocument } from "@/domain/document";
+import { parseDocument, parseTodoLine } from "@/domain/document";
 import { POMODORO_MINUTES } from "@/domain/minutes";
 import type { Alarm, Notifier } from "@/domain/notifier";
 import { stepTimer, type Timer, type TimerOp, type TimerStep } from "@/domain/timer";
@@ -26,7 +26,8 @@ const REJECTION_MESSAGES: Record<Rejection["rejected"], string> = {
   unstable: "この操作をするとファイルの区切りが変わるため、取りやめました",
 };
 const WRITE_FAILED_MESSAGE = "ファイルに書き込めませんでした";
-const EXPIRED_MESSAGE = "25分たちました。ポモドーロを記録しました";
+const expiredMessage = (text: string) =>
+  `25分たちました。「${parseTodoLine(text)?.name ?? text}」にポモドーロを記録しました`;
 const DISCARDED_MESSAGE =
   "着手中のカードが見つからないため、計測を取りやめました（記録していません）";
 const missingMessage = (dayKey: string) => `${dayKey} のファイルがありません`;
@@ -116,7 +117,7 @@ export class DayEditor {
     const before = this.timer;
     try {
       const step = await this.write(dayKey, op);
-      this.announce(step);
+      this.announce(step, before);
       return "done";
     } catch (error) {
       await this.setTimer(before);
@@ -158,10 +159,10 @@ export class DayEditor {
     }
   }
 
-  private announce(step: TimerStep): void {
-    if (step.notice === "expired") {
-      this.deps.notifier.notify(EXPIRED_MESSAGE);
-      this.deps.alarm.ring();
+  /** 満了は見逃さないよう Alarm で知らせる。カードの名前は、確定する前のタイマーの行から取る */
+  private announce(step: TimerStep, before: Timer): void {
+    if (step.notice === "expired" && before) {
+      this.deps.alarm.ring(expiredMessage(before.text));
     } else if (step.notice === "discarded") {
       this.deps.notifier.notify(DISCARDED_MESSAGE);
     }

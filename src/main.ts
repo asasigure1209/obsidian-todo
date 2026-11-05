@@ -1,6 +1,6 @@
 import { Plugin } from "obsidian";
 import { systemClock } from "@/adapters/clock";
-import { beepAlarm, noticeNotifier } from "@/adapters/notifier";
+import { expiryAlarm, noticeNotifier } from "@/adapters/notifier";
 import { PluginTimerStore } from "@/adapters/timer-store";
 import { VaultDayFiles } from "@/adapters/vault";
 import type { BoardDeps } from "@/app/board-service";
@@ -22,7 +22,7 @@ export default class DailyKanbanTodoPlugin extends Plugin {
       store: new PluginTimerStore(this),
       clock: systemClock,
       notifier: noticeNotifier,
-      alarm: beepAlarm,
+      alarm: expiryAlarm,
       onError: reportError,
     });
     this.register(() => editor.close());
