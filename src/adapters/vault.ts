@@ -14,6 +14,15 @@ export class VaultDayFiles implements DayFiles {
     return file ? this.vault.read(file) : undefined;
   }
 
+  async process(dayKey: string, transform: (body: string) => string): Promise<boolean> {
+    const file = this.vault.getFileByPath(this.pathOf(dayKey));
+    if (!file) {
+      return false;
+    }
+    await this.vault.process(file, transform);
+    return true;
+  }
+
   /** 名前の変更は、その日のファイルへ変わったときも、その日のファイルから変わったときも知らせる */
   onChange(dayKey: string, listener: () => void): () => void {
     const path = this.pathOf(dayKey);

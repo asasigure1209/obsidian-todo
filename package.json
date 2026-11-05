@@ -28,6 +28,7 @@
     "@stryker-mutator/vitest-runner": "10.1.1",
     "@tsconfig/svelte": "5.0.8",
     "@types/node": "^24.19.2",
+    "@types/sortablejs": "1.15.9",
     "@vitest/coverage-v8": "5.1.0",
     "esbuild": "0.28.2",
     "esbuild-svelte": "0.9.5",
@@ -44,5 +45,8 @@
       "esbuild",
       "lefthook"
     ]
+  },
+  "dependencies": {
+    "sortablejs": "1.15.7"
   }
 }
