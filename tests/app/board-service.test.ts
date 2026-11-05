@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type BoardSession, type BoardState, openBoard } from "@/app/board-service";
 import { DayEditor } from "@/app/day-editor";
-import type { LineRef } from "@/domain/commands";
+import type { LineRef, WorkEdits } from "@/domain/commands";
 import type { Timer } from "@/domain/timer";
 import { FakeDayFiles, settle } from "./fakes/day-files";
 import { FakeAlarm, FakeClock, FakeTimerStore, NINE, runningTimer, TODAY } from "./fakes/timer";
@@ -423,6 +423,71 @@ describe("openBoard：カードを動かす", () => {
     expect(files.startedWrites).toBe(0);
     expect(states.at(-1)).toEqual(["a,b", "", "c"]);
     expect(notices).toEqual([]);
+  });
+});
+
+describe("openBoard：作業時間の修正（M2）", () => {
+  const body = "- [x] a\n    - 25分 ポモドーロ\n- [ ] b\n";
+  const a = card(0, "- [x] a");
+  const entry = { index: 0, text: "    - 25分 ポモドーロ" };
+  const edits: WorkEdits = { updated: [{ entry, minutes: 20 }], removed: [], added: [10] };
+  const minutesOf = (state: BoardState) =>
+    state.kind === "board" ? state.board.done[0]?.workedMinutes : undefined;
+
+  /** 開いて読み込み、受け取った状態をそのまま記録する */
+  async function openWithStates(files: FakeDayFiles, dayKey = today) {
+    const opened = open(files, dayKey);
+    const received: BoardState[] = [];
+    opened.session.subscribe((state) => received.push(state));
+    await settle();
+    return { ...opened, received };
+  }
+
+  it("保存すると書き込みを待たずに新しい合計を出し、書き込めたら true を返す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session, received } = await openWithStates(files);
+    files.holdWrites();
+
+    const saved = session.editWork(a, edits);
+
+    expect(minutesOf(received.at(-1) as BoardState)).toBe(30);
+    await settle();
+    files.releaseWrite();
+    expect(await saved).toBe(true);
+    expect(files.body(today)).toBe("- [x] a\n    - 20分 手動\n    - 10分 手動\n- [ ] b\n");
+  });
+
+  it("過去の日でも保存できる", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, body);
+    const { session, notices } = await openWithStates(files, yesterday);
+
+    expect(await session.editWork(a, edits)).toBe(true);
+    expect(files.body(yesterday)).toContain("    - 20分 手動\n");
+    expect(notices).toEqual([]);
+  });
+
+  it("ファイルが変わっていて保存できなければ、知らせて false を返す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session, notices } = await openWithStates(files);
+    files.write(today, "- [x] a\n    - 10分 ポモドーロ\n");
+    await settle();
+
+    expect(await session.editWork(a, edits)).toBe(false);
+    expect(notices).toEqual(["ファイルが変わっていたので、操作を取りやめて読み直しました"]);
+  });
+
+  it("閉じた後は保存せず、false を返す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session } = await openWithStates(files);
+
+    session.close();
+
+    expect(await session.editWork(a, edits)).toBe(false);
+    expect(files.startedWrites).toBe(0);
   });
 });
 

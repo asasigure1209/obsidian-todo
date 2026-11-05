@@ -6,13 +6,21 @@ import {
   applyToBody,
   completeCard,
   type DocumentCommand,
+  editWork,
   isRejection,
   type LineRef,
   moveCard,
   removeWork,
   updateWork,
+  type WorkEdits,
 } from "@/domain/commands";
-import { type DayDocument, parseDocument, type Status, todoBlocks } from "@/domain/document";
+import {
+  type DayDocument,
+  parseDocument,
+  parseWorkEntry,
+  type Status,
+  todoBlocks,
+} from "@/domain/document";
 import { markdownLike } from "./arbitraries";
 
 const run = (body: string, command: DocumentCommand) => applyToBody(body, command);
@@ -262,12 +270,23 @@ describe("addWork / updateWork / removeWork（作業時間）", () => {
     const entry = { index: 0, text: "  - 12分 中断 問い合わせ" };
     const target = card(0, "- [x] メールの返信");
 
-    expect(run(body, (doc) => updateWork(doc, target, entry, { minutes: 12, memo: "電話" }))).toBe(
-      "- [x] メールの返信\n  - 12分 手動 電話\n",
+    expect(run(body, (doc) => updateWork(doc, target, entry, { minutes: 10, memo: "電話" }))).toBe(
+      "- [x] メールの返信\n  - 10分 手動 電話\n",
     );
-    expect(run(body, (doc) => updateWork(doc, target, entry, { minutes: 12, memo: "" }))).toBe(
-      "- [x] メールの返信\n  - 12分 手動\n",
+    expect(run(body, (doc) => updateWork(doc, target, entry, { minutes: 10, memo: "" }))).toBe(
+      "- [x] メールの返信\n  - 10分 手動\n",
     );
+  });
+
+  it("分数を変えずにメモだけ書き換えたときは、種類を変えない", () => {
+    const body = "- [x] メールの返信\n  - 12分 中断 問い合わせ\n";
+    const entry = { index: 0, text: "  - 12分 中断 問い合わせ" };
+
+    expect(
+      run(body, (doc) =>
+        updateWork(doc, card(0, "- [x] メールの返信"), entry, { minutes: 12, memo: "電話" }),
+      ),
+    ).toBe("- [x] メールの返信\n  - 12分 中断 電話\n");
   });
 
   it("書き換えた分数が書式にならなければ何もしない", () => {
@@ -303,6 +322,77 @@ describe("addWork / updateWork / removeWork（作業時間）", () => {
     ).toEqual({
       rejected: "stale",
     });
+  });
+});
+
+describe("editWork（M2 の保存）", () => {
+  const mail = card(0, "- [x] メールの返信");
+  const body = `- [x] メールの返信
+    - 25分 ポモドーロ
+    - 12分 中断 問い合わせ
+    メモ
+    - 25分 ポモドーロ
+`;
+  const entry = (index: number, text: string): LineRef => ({ index, text: `    - ${text}` });
+  const noEdits: WorkEdits = { updated: [], removed: [], added: [] };
+
+  it("分数の書き換え・削除・追加を1回の変更にまとめる", () => {
+    const edits: WorkEdits = {
+      updated: [{ entry: entry(2, "25分 ポモドーロ"), minutes: 20 }],
+      removed: [entry(1, "12分 中断 問い合わせ")],
+      added: [5, 15],
+    };
+
+    expect(run(body, (doc) => editWork(doc, mail, edits))).toBe(`- [x] メールの返信
+    - 25分 ポモドーロ
+    メモ
+    - 20分 手動
+    - 5分 手動
+    - 15分 手動
+`);
+  });
+
+  it("前にある記録を消しても、後ろの記録の書き換えや削除は当たる", () => {
+    const edits: WorkEdits = {
+      ...noEdits,
+      removed: [entry(0, "25分 ポモドーロ"), entry(2, "25分 ポモドーロ")],
+      updated: [{ entry: entry(1, "12分 中断 問い合わせ"), minutes: 10 }],
+    };
+
+    expect(run(body, (doc) => editWork(doc, mail, edits))).toBe(`- [x] メールの返信
+    - 10分 手動 問い合わせ
+    メモ
+`);
+  });
+
+  it("開いた後に足された記録（タイマーの記録）は、そのまま残る", () => {
+    const later = `${body}    - 25分 ポモドーロ\n`;
+    const edits: WorkEdits = { ...noEdits, removed: [entry(2, "25分 ポモドーロ")], added: [5] };
+
+    expect(run(later, (doc) => editWork(doc, mail, edits))).toBe(`- [x] メールの返信
+    - 25分 ポモドーロ
+    - 12分 中断 問い合わせ
+    メモ
+    - 25分 ポモドーロ
+    - 5分 手動
+`);
+  });
+
+  it("1つでも位置や文字列が一致しなければ、全体を何もしない", () => {
+    const edits: WorkEdits = {
+      updated: [{ entry: entry(0, "25分 ポモドーロ"), minutes: 20 }],
+      removed: [entry(1, "12分 中断 電話")],
+      added: [5],
+    };
+
+    expect(run(body, (doc) => editWork(doc, mail, edits))).toEqual({ rejected: "stale" });
+    expect(run(body, (doc) => editWork(doc, card(0, "- [ ] メールの返信"), noEdits))).toEqual({
+      rejected: "stale",
+    });
+  });
+
+  it("変更が空なら本文は変わらない", () => {
+    expect(run(body, (doc) => editWork(doc, mail, noEdits))).toBe(body);
   });
 });
 
@@ -415,6 +505,63 @@ describe("コマンドの性質", () => {
         expect(lineTexts(parseDocument(written as string))).toEqual(
           lineTexts(moved(body, ref, to, at)),
         );
+      }),
+    );
+  });
+
+  /** 本文と、その中のカードを1つ、そのカードの作業時間の記録への変更とともに */
+  const bodyWithWorkEdits = bodyWithCard.chain(({ body, ref }) => {
+    const entries = todoBlocks(parseDocument(body).segments)[ref.index]?.children.flatMap(
+      (child) => {
+        const parsed = parseWorkEntry(child.text);
+        return parsed ? [{ text: child.text, minutes: parsed.minutes }] : [];
+      },
+    ) as { text: string; minutes: number }[];
+    const choice = fc.constantFrom("keep", "update", "remove");
+    return fc
+      .record({
+        choices: fc.array(choice, { minLength: entries.length, maxLength: entries.length }),
+        minutes: fc.array(fc.integer({ min: 1, max: 200 }), {
+          minLength: entries.length,
+          maxLength: entries.length,
+        }),
+        added: fc.array(fc.integer({ min: 1, max: 200 }), { maxLength: 3 }),
+      })
+      .map(({ choices, minutes, added }) => {
+        const refs = entries.map((e, index) => ({ index, text: e.text }));
+        const edits: WorkEdits = {
+          updated: refs.flatMap((entry, i) =>
+            choices[i] === "update" ? [{ entry, minutes: minutes[i] as number }] : [],
+          ),
+          removed: refs.filter((_, i) => choices[i] === "remove"),
+          added,
+        };
+        const expected =
+          entries.reduce(
+            (sum, e, i) =>
+              sum +
+              (choices[i] === "keep" ? e.minutes : 0) +
+              (choices[i] === "update" ? (minutes[i] as number) : 0),
+            0,
+          ) + added.reduce((sum, m) => sum + m, 0);
+        return { body, ref, edits, expected };
+      });
+  });
+
+  it("editWork の後、カードの作業時間の合計は、変更から求めた合計と同じ", () => {
+    fc.assert(
+      fc.property(bodyWithWorkEdits, ({ body, ref, edits, expected }) => {
+        const next = editWork(parseDocument(body), ref, edits);
+        if (isRejection(next)) {
+          throw new Error(`拒否された: ${next.rejected}`);
+        }
+
+        const block = todoBlocks(next.segments)[ref.index];
+        const total = block?.children
+          .flatMap((child) => parseWorkEntry(child.text) ?? [])
+          .reduce((sum, e) => sum + e.minutes, 0);
+        expect(total).toBe(expected);
+        expect(fixedTexts(next)).toEqual(fixedTexts(parseDocument(body)));
       }),
     );
   });

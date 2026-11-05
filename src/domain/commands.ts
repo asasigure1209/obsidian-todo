@@ -107,7 +107,7 @@ export function addWork(doc: DayDocument, card: LineRef, work: WorkInput): Comma
   });
 }
 
-/** 作業時間を書き換える（M2）。手で直した記録なので種類は手動になる。メモを省くと元のメモを残し、空文字で消す */
+/** 作業時間を書き換える（M2）。分数を変えたら、手で直した記録なので種類は手動になる。メモを省くと元のメモを残し、空文字で消す */
 export function updateWork(
   doc: DayDocument,
   card: LineRef,
@@ -122,6 +122,35 @@ export function updateWork(
     const line = rewriteEntry(current, work);
     return line ? replaceChild(block, current, line) : INVALID;
   });
+}
+
+/** M2 の「保存」。開いたときの記録への書き換えと削除、足した分数（手動） */
+export interface WorkEdits {
+  updated: { entry: LineRef; minutes: number }[];
+  removed: LineRef[];
+  added: number[];
+}
+
+/**
+ * M2 の変更を1回の変更にまとめて当てる。どれか1つでも一致しなければ全体を何もしない。
+ * 書き換えは行の数を変えないので先に当て、削除は後ろの行からにして、前の行の位置をずらさない。
+ * 開いた後にタイマーが足した記録は末尾に増えるだけなので、開いたときの位置のまま当たる
+ */
+export function editWork(doc: DayDocument, card: LineRef, edits: WorkEdits): CommandResult {
+  const removed = [...edits.removed].sort((a, b) => b.index - a.index);
+  const steps: DocumentCommand[] = [
+    ...edits.updated.map(
+      ({ entry, minutes }) =>
+        (d: DayDocument) =>
+          updateWork(d, card, entry, { minutes }),
+    ),
+    ...removed.map((entry) => (d: DayDocument) => removeWork(d, card, entry)),
+    ...edits.added.map(
+      (minutes) => (d: DayDocument) => addWork(d, card, { minutes, kind: "手動" }),
+    ),
+  ];
+  const start: CommandResult = findCard(doc, card) ? doc : STALE;
+  return steps.reduce((result, step) => (isRejection(result) ? result : step(result)), start);
 }
 
 /** 作業時間を削除する（M2）。書式外の子の行は残す */
@@ -223,9 +252,13 @@ function workLine(indent: string, work: WorkInput): Line | undefined {
 
 /** 字下げと改行はそのままに、分数とメモを書き換える */
 function rewriteEntry(line: Line, work: Omit<WorkInput, "kind">): Line | undefined {
-  const { indent, memo } = parseWorkEntry(line.text) as WorkEntry;
+  const { indent, memo, minutes, kind } = parseWorkEntry(line.text) as WorkEntry;
   const kept = memo === undefined ? {} : { memo };
-  const next = workLine(indent, { ...kept, ...work, kind: "手動" });
+  const next = workLine(indent, {
+    ...kept,
+    ...work,
+    kind: work.minutes === minutes ? kind : "手動",
+  });
   return next && { ...next, eol: line.eol };
 }
 

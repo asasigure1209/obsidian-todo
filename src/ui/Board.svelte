@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { BoardSession } from "@/app/board-service";
+import type { Card } from "@/domain/board";
 import Column from "./Column.svelte";
 import type { Drop } from "./sortable";
 
@@ -7,9 +8,11 @@ interface Props {
   dayKey: string;
   /** 表示する状態（ストア）と、ボードからの操作の窓口 */
   session: BoardSession;
+  /** M2 のダイアログを開く。Obsidian のダイアログは BoardView が持つ */
+  openWork: (card: Card) => void;
 }
 
-const { dayKey, session }: Props = $props();
+const { dayKey, session, openWork }: Props = $props();
 
 const COLUMNS = [
   ["todo", "今日やる"],
@@ -45,6 +48,7 @@ function handleDrop(drop: Drop): void {
           cards={$session.board[status]}
           running={$session.running}
           onDrop={handleDrop}
+          {openWork}
         />
       {/each}
     </div>

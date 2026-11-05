@@ -6,8 +6,16 @@ import {
   type Status,
   type TodoBlock,
   todoBlocks,
-  type WorkEntry,
+  type WorkKind,
 } from "@/domain/document";
+
+/** 作業時間の1件。ref はそのまま作業時間のコマンドに渡せる（カードの中で n 番目の作業時間の行） */
+export interface WorkRecord {
+  ref: LineRef;
+  minutes: number;
+  kind: WorkKind;
+  memo?: string;
+}
 
 /** ボードに出す1件。ref はそのままコマンドに渡せる（AD-5） */
 export interface Card {
@@ -20,6 +28,8 @@ export interface Card {
   workedMinutes: number;
   /** 種類がポモドーロの作業時間の行の数。着手中には「この数＋1」個目と出す */
   pomodoros: number;
+  /** 作業時間の記録。本文の順番（M2） */
+  entries: WorkRecord[];
 }
 
 /** 3列のボード。列の中の順番は Markdown の行の順番（design 7.2） */
@@ -48,9 +58,20 @@ function toCard(block: TodoBlock, index: number, key: string): Card {
     ...(estimate && { estimate }),
     workedMinutes: entries.reduce((sum, entry) => sum + entry.minutes, 0),
     pomodoros: entries.filter((entry) => entry.kind === "ポモドーロ").length,
+    entries,
   };
 }
 
-function workEntries(block: TodoBlock): WorkEntry[] {
-  return block.children.flatMap((child) => parseWorkEntry(child.text) ?? []);
+function workEntries(block: TodoBlock): WorkRecord[] {
+  return block.children
+    .flatMap((child) => {
+      const entry = parseWorkEntry(child.text);
+      return entry ? [{ text: child.text, entry }] : [];
+    })
+    .map(({ text, entry: { minutes, kind, memo } }, index) => ({
+      ref: { index, text },
+      minutes,
+      kind,
+      ...(memo !== undefined && { memo }),
+    }));
 }

@@ -2,12 +2,14 @@ import {
   addWork,
   completeCard,
   type DocumentCommand,
+  editWork,
   findCard,
   isRejection,
   type LineRef,
   moveCard,
   type Rejection,
   STALE,
+  type WorkEdits,
 } from "@/domain/commands";
 import {
   type DayDocument,
@@ -31,14 +33,18 @@ export interface RunningTimer {
 
 export type Timer = RunningTimer | undefined;
 
-/** タイマーに関わるきっかけ。move はボードのドラッグ、expire は毎秒の満了の判定、recheck は保留中の読み直し */
+/**
+ * タイマーに関わるきっかけ。move はボードのドラッグ、expire は毎秒の満了の判定、recheck は保留中の読み直し。
+ * work は M2 の保存で、タイマーは動かさないが、同じ並びで書き込むためにここを通す
+ */
 export type TimerOp =
   | { kind: "move"; card: LineRef; status: Status; position: number }
   | { kind: "complete"; card: LineRef }
   | { kind: "interrupt" }
   | { kind: "next"; card: LineRef }
   | { kind: "expire" }
-  | { kind: "recheck" };
+  | { kind: "recheck" }
+  | { kind: "work"; card: LineRef; edits: WorkEdits };
 
 export interface TimerStep {
   result: DayDocument | Rejection;
@@ -90,6 +96,9 @@ export function stepTimer(
       return expire(ctx);
     case "recheck":
       return recheck(ctx);
+    case "work":
+      // 作業時間を直しても TODO の行は変わらないので、対象の判定はしない（design 8.1）
+      return { result: editWork(doc, op.card, op.edits), timer };
   }
 }
 
