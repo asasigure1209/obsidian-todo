@@ -1,12 +1,19 @@
+import {
+  DISCARDED_MESSAGE,
+  expiredMessage,
+  missingMessage,
+  REJECTION_MESSAGES,
+  WRITE_FAILED_MESSAGE,
+} from "@/app/messages";
 import type { Clock } from "@/domain/clock";
-import { applyToBody, isRejection, type Rejection } from "@/domain/commands/command";
+import { applyToBody, isRejection } from "@/domain/commands/command";
 import type { DayFiles } from "@/domain/day-files";
 import { parseDocument } from "@/domain/document/body";
-import { parseTodoLine } from "@/domain/document/todo-line";
 import type { Alarm, Notifier } from "@/domain/notifier";
 import {
   isDue,
   type RunningTimer,
+  sameTimer,
   startsTimer,
   stepTimer,
   type Timer,
@@ -27,18 +34,6 @@ export interface EditorDeps {
 
 /** done：書き込んだ（または変える必要がなかった）、refused：断って知らせた、skipped：続けてよいかの確認で取りやめた */
 export type EditOutcome = "done" | "refused" | "skipped";
-
-const REJECTION_MESSAGES: Record<Rejection["rejected"], string> = {
-  stale: "ファイルが変わっていたので、操作を取りやめて読み直しました",
-  invalid: "入力が書式に合わないため、追加・変更しませんでした",
-  unstable: "この操作をするとファイルの区切りが変わるため、取りやめました",
-};
-const WRITE_FAILED_MESSAGE = "ファイルに書き込めませんでした";
-const expiredMessage = (text: string) =>
-  `25分たちました。「${parseTodoLine(text)?.name ?? text}」にポモドーロを記録しました`;
-const DISCARDED_MESSAGE =
-  "着手中のカードが見つからないため、計測を取りやめました（記録していません）";
-const missingMessage = (dayKey: string) => `${dayKey} のファイルがありません`;
 
 class Refused extends Error {
   constructor(readonly userMessage: string) {
@@ -246,16 +241,4 @@ export class DayEditor {
   private now(): number {
     return this.deps.clock.now().getTime();
   }
-}
-
-function sameTimer(a: Timer, b: Timer): boolean {
-  return (
-    a === b ||
-    (a !== undefined &&
-      b !== undefined &&
-      a.dayKey === b.dayKey &&
-      a.startedAt === b.startedAt &&
-      a.text === b.text &&
-      a.held === b.held)
-  );
 }

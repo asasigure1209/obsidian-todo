@@ -196,15 +196,17 @@ src/
     clock.ts              現在時刻の取得元の型（実体は adapters/clock.ts）
     notifier.ts           利用者への知らせの型（実体は adapters/notifier.ts）
     day.ts                日付のキーと、その日にできる操作（design 8.3）
-    board.ts              本文から3列の表示用モデルを作る（AD-2）
+    board.ts              本文から3列の表示用モデルと、計測中のカードを作る（AD-2）
     work-draft.ts         M2 の下書き（保存するまでの行の追加・変更・削除と、保存する変更）
     day-files.ts          その日のファイルの取得元の型（実体は adapters/vault.ts）
   app/
     board-service.ts      ファイルの変更を受けて読み直す（AD-2）。操作を先読みしてから、day-editor に渡す（AD-3）
     day-editor.ts         書き込みを1本に並べ、タイマーを保存してから vault.process で書き戻す。毎秒の満了の判定（AD-6）
+    store.ts              状態を受け取り手へ流す部品（Svelte のストアと同じ形）
+    messages.ts           利用者への知らせの文言
   adapters/
     vault.ts              ファイルの取得・変更イベントの購読
-    timer-store.ts        タイマー状態の保存（プラグインの保存領域）
+    timer-store.ts        タイマー状態の保存（プラグインの保存領域）。読んだ値の形の検査（parseTimer）
     notifier.ts           通知と音（音声ファイルを同梱せず、ブラウザの音声機能で短い音を鳴らす）
     clock.ts              現在時刻
   ui/
@@ -213,6 +215,7 @@ src/
 tests/
   domain/                 ドメイン層の単体テスト。読み書きの往復テストを含む
   app/                    手書きの偽物（fakes/）を使うテスト
+  adapters/               手書きの偽物を使うテスト（Obsidian の API に触れない部分）
 ```
 
 ---

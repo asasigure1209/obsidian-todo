@@ -1,10 +1,11 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Board, toBoard } from "@/domain/board";
+import { type Board, runningCard, toBoard } from "@/domain/board";
 import { moveCard } from "@/domain/commands/card";
 import { isRejection, type LineRef } from "@/domain/commands/command";
 import { editWork } from "@/domain/commands/work";
 import { parseDocument, todoBlocks } from "@/domain/document/body";
+import type { RunningTarget } from "@/domain/timer";
 import { markdownLike } from "./document/arbitraries";
 
 const board = `---
@@ -174,5 +175,32 @@ describe("toBoard", () => {
         }
       }),
     );
+  });
+});
+
+describe("runningCard", () => {
+  const startedAt = new Date(2026, 10, 4, 9, 0).getTime();
+  /** 本文の index 番目の TODO ブロックを計測している */
+  const runningAt = (index: number, text: string): RunningTarget => ({
+    timer: { dayKey: "2026-11-04", startedAt, text, held: false },
+    target: { index, text },
+  });
+
+  it("計測中の対象のカードを示す。「何個目」は、そのカードのポモドーロの行の数＋1", () => {
+    const running = runningAt(1, "- [/] 提案資料の構成を固める [est:: 3]");
+    expect(runningCard(boardOf(board), running)).toEqual({
+      key: "- [/] 提案資料の構成を固める [est:: 3]#0",
+      startedAt,
+      count: 2,
+    });
+  });
+
+  it("計測中でなければ示さない", () => {
+    expect(runningCard(boardOf(board), undefined)).toBeUndefined();
+  });
+
+  it("対象の位置に着手中のカードがなければ示さない", () => {
+    const running = runningAt(0, "- [ ] API設計レビューの指摘に対応 [est:: 2]");
+    expect(runningCard(boardOf(board), running)).toBeUndefined();
   });
 });

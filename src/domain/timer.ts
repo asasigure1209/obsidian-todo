@@ -117,6 +117,19 @@ export function isDue(timer: Timer, now: number): timer is RunningTimer {
   return timer !== undefined && !timer.held && now - timer.startedAt >= POMODORO_MS;
 }
 
+/** 同じタイマーか。中身で比べる（保存領域から読んだ値と遷移で作った値は、別のオブジェクトになる） */
+export function sameTimer(a: Timer, b: Timer): boolean {
+  return (
+    a === b ||
+    (a !== undefined &&
+      b !== undefined &&
+      a.dayKey === b.dayKey &&
+      a.startedAt === b.startedAt &&
+      a.text === b.text &&
+      a.held === b.held)
+  );
+}
+
 /** 新しく計測を始める操作か */
 export function startsTimer(op: TimerOp): boolean {
   return (op.kind === "move" && op.status === "doing") || op.kind === "next";
@@ -221,16 +234,4 @@ function recordThen(
 function doingText(text: string): string {
   const todo = parseTodoLine(text);
   return todo ? formatTodoLine({ ...todo, status: "doing" }) : text;
-}
-
-/** 保存領域から読んだ値をタイマーにする。形が合わなければ停止中（プラグインの更新や手での編集で崩れていても動くように） */
-export function parseTimer(value: unknown): Timer {
-  const object = typeof value === "object" && value !== null ? value : {};
-  const { dayKey, startedAt, text, held } = object as Partial<RunningTimer>;
-  const valid =
-    typeof dayKey === "string" &&
-    typeof startedAt === "number" &&
-    typeof text === "string" &&
-    typeof held === "boolean";
-  return valid ? { dayKey, startedAt, text, held } : undefined;
 }
