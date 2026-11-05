@@ -1,4 +1,5 @@
 import { type BoardEdit, boardEdits } from "@/app/board/operations";
+import { LatestReader, type ReadResult } from "@/app/board/reader";
 import { type BoardState, boardState, LOADING, readState, UNREADABLE } from "@/app/board/state";
 import { BoardWriter } from "@/app/board/writer";
 import type { DayEditor } from "@/app/day-editor";
@@ -45,7 +46,7 @@ export function openBoard(deps: BoardDeps, dayKey: string): BoardSession {
 }
 
 /**
- * - ファイルが変わるたびに読み直して流す（AD-2）。読み込みは追い越されることがあるので、最後に始めた読み込みの結果だけを使う
+ * - ファイルが変わるたびに LatestReader で読み直して流す（AD-2）
  * - 読めなかったときは前の状態のまま次の変更を待つ。まだ何も読めていなければ、読めなかったことを流す
  * - 操作は、最後に読んだ本文に当てた結果をすぐに流してから（先読み）、BoardWriter で書き込む（AD-3）。
  *   書き込みが終わるまでは読み直しの結果を捨て、書き込みのたびに読み直す
@@ -54,10 +55,10 @@ class Session implements BoardSession {
   private doc: DayDocument | undefined;
   private loaded = false;
   private closed = false;
-  private latest = 0;
   private readonly states: Store<BoardState>;
-  /** 書き込みが終わるたびに読み直す。書き込みが残っているうちの読み直しは load が捨てるので、毎回読み直してよい */
+  /** 書き込みが終わるたびに読み直す。書き込みが残っているうちの読み直しは LatestReader が捨てるので、毎回読み直してよい */
   private readonly writer: BoardWriter;
+  private readonly reader: LatestReader;
   private readonly stopListening: () => void;
 
   constructor(
@@ -65,9 +66,16 @@ class Session implements BoardSession {
     private readonly dayKey: string,
   ) {
     this.states = new Store(LOADING, deps.onError);
-    this.writer = new BoardWriter(deps.editor, dayKey, () => this.reload(), deps.onError);
-    this.stopListening = deps.files.onChange(dayKey, () => this.reload());
-    this.reload();
+    this.writer = new BoardWriter(deps.editor, dayKey, () => this.reader.reload(), deps.onError);
+    this.reader = new LatestReader(
+      deps.files,
+      dayKey,
+      () => this.closed || this.writer.isWriting(),
+      (read) => this.applyRead(read),
+      deps.onError,
+    );
+    this.stopListening = deps.files.onChange(dayKey, () => this.reader.reload());
+    this.reader.reload();
   }
 
   subscribe(run: (state: BoardState) => void): () => void {
@@ -126,21 +134,8 @@ class Session implements BoardSession {
     }
   }
 
-  private reload(): void {
-    this.load().catch(this.deps.onError);
-  }
-
-  private async load(): Promise<void> {
-    const current = ++this.latest;
-    const read = await tryRead(this.deps.files, this.dayKey);
-    const outdated = current !== this.latest || this.writer.isWriting();
-    if (!(this.closed || outdated)) {
-      this.applyRead(read);
-    }
-  }
-
   /** 本文の解釈で起きた例外は読めなかったことにせず、onError へ渡す */
-  private applyRead(read: { body: string | undefined } | undefined): void {
+  private applyRead(read: ReadResult): void {
     if (!read) {
       if (!this.loaded) {
         this.states.emit(UNREADABLE);
@@ -156,17 +151,5 @@ class Session implements BoardSession {
   /** タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい */
   private toState(doc: DayDocument): BoardState {
     return boardState(doc, this.deps.editor.current(), this.dayKey);
-  }
-}
-
-/** 読めなかったときは undefined */
-async function tryRead(
-  files: DayFiles,
-  dayKey: string,
-): Promise<{ body: string | undefined } | undefined> {
-  try {
-    return { body: await files.read(dayKey) };
-  } catch {
-    return undefined;
   }
 }
