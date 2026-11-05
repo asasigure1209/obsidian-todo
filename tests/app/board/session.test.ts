@@ -238,6 +238,24 @@ describe("openBoard：読み直し", () => {
 
     expect(states).toEqual(["loading"]);
   });
+
+  it("書き込みの途中で閉じたら、書き込みが終わっても読み直さない", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, "- [ ] a\n");
+    const { session } = open(files);
+    await settle();
+    files.holdWrites();
+    const moved = session.move(card(0, "- [ ] a"), "done", 0);
+    await settle();
+    session.close();
+    const reads = files.reads;
+
+    files.releaseWrite();
+    await moved;
+    await settle();
+
+    expect(files.reads).toBe(reads);
+  });
 });
 
 describe("openBoard：カードを動かす", () => {

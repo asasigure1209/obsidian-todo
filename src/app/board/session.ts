@@ -74,8 +74,14 @@ class Session implements BoardSession {
     private readonly dayKey: string,
   ) {
     this.states = new Store(LOADING, deps.onError);
-    this.writer = new BoardWriter(deps.editor, dayKey, deps.onError);
     this.reader = new LatestReader(deps.files, dayKey, (read) => this.receive(read), deps.onError);
+    // 書き込み中の読み直しは receive が捨てるので、書き込みが終わるたびに読み直してよい
+    this.writer = new BoardWriter(
+      deps.editor,
+      dayKey,
+      () => this.reloadUnlessClosed(),
+      deps.onError,
+    );
     this.stopListening = deps.files.onChange(dayKey, () => this.reader.reload());
     this.reader.reload();
   }
@@ -120,11 +126,13 @@ class Session implements BoardSession {
       return Promise.resolve(false);
     }
     this.preview(op);
-    // 書き込み中の読み直しは receive が捨てるので、書き込みが終わるたびに読み直してよい
-    return this.writer.write(op).then((written) => {
+    return this.writer.write(op);
+  }
+
+  private reloadUnlessClosed(): void {
+    if (!this.closed) {
       this.reader.reload();
-      return written;
-    });
+    }
   }
 
   /**

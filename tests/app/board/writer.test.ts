@@ -30,8 +30,15 @@ const interrupt: TimerOp = { kind: "interrupt" };
 function setUp() {
   const editor = new FakeEditor();
   const errors: unknown[] = [];
-  const writer = new BoardWriter(editor, TODAY, (e) => errors.push(e));
-  return { editor, writer, errors };
+  /** 知らせを受けた時点で、まだ書き込み中だったか */
+  const settled: boolean[] = [];
+  const writer: BoardWriter = new BoardWriter(
+    editor,
+    TODAY,
+    () => settled.push(writer.isWriting()),
+    (e) => errors.push(e),
+  );
+  return { editor, writer, settled, errors };
 }
 
 describe("BoardWriter", () => {
@@ -55,6 +62,17 @@ describe("BoardWriter", () => {
     editor.finish("done");
     await second;
     expect(writer.isWriting()).toBe(false);
+  });
+
+  it("書き込みが終わるたびに、書き込み中でなくなったのと同時に知らせる", async () => {
+    const { editor, writer, settled } = setUp();
+    const first = writer.write(interrupt);
+    const second = writer.write(interrupt);
+    editor.finish("done");
+    editor.finish("refused");
+    // 知らせが先に届いてから、結果が返る
+    const results = Promise.all([first, second]).then(() => [...settled]);
+    expect(await results).toEqual([true, false]);
   });
 
   it("断られたら、それより前に受けて並んでいる操作は書き込まずに捨てる", async () => {

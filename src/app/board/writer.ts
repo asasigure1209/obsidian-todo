@@ -16,6 +16,8 @@ export class BoardWriter {
   constructor(
     private readonly editor: Editor,
     private readonly dayKey: string,
+    /** 書き込みが終わるたびに、書き込み中の数を減らしたのと同じ流れで呼ぶ。間に別の読み込みの結果が入り込まない */
+    private readonly onSettled: () => void,
     private readonly onError: (error: unknown) => void,
   ) {}
 
@@ -35,6 +37,7 @@ export class BoardWriter {
           this.epoch++;
         }
         this.pending--;
+        this.onSettled();
         return outcome === "done";
       })
       .catch((error: unknown) => {
