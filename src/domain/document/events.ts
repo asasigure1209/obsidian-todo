@@ -1,4 +1,4 @@
-import type { DayDocument } from "@/domain/document";
+import type { DayDocument } from "@/domain/document/body";
 
 const EVENTS_KEY = /^events:\s*$/;
 const LIST_ITEM = /^\s*- (.*)$/;

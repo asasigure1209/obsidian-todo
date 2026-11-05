@@ -1,4 +1,4 @@
-import { parseTodoLine, type TodoLine } from "@/domain/todo-line";
+import { parseTodoLine, type TodoLine } from "@/domain/document/todo-line";
 
 /**
  * 1行。改行コード（`\n`・`\r\n`）を分けて持ち、書き戻しで元に戻せるようにする。

@@ -2,8 +2,8 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Board, toBoard } from "@/domain/board";
 import { editWork, isRejection, type LineRef, moveCard } from "@/domain/commands";
-import { parseDocument, todoBlocks } from "@/domain/document";
-import { markdownLike } from "./arbitraries";
+import { parseDocument, todoBlocks } from "@/domain/document/body";
+import { markdownLike } from "./document/arbitraries";
 
 const board = `---
 date: 2026-11-04

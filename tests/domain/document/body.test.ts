@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { parseDocument, type Segment, serializeDocument } from "@/domain/document";
+import { parseDocument, type Segment, serializeDocument } from "@/domain/document/body";
 import { markdownLike } from "./arbitraries";
 
 const lf = (text: string) => ({ text, eol: "\n" });

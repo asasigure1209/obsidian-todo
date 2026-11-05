@@ -1,4 +1,4 @@
-import type { Line, TodoBlock } from "@/domain/document";
+import type { Line, TodoBlock } from "@/domain/document/body";
 
 export type WorkKind = "ポモドーロ" | "中断" | "手動";
 

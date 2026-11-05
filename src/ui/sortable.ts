@@ -1,6 +1,6 @@
 import Sortable from "sortablejs";
 import type { Action } from "svelte/action";
-import type { Status } from "@/domain/todo-line";
+import type { Status } from "@/domain/document/todo-line";
 
 /** ドロップした結果。position は、動かしたカードを除いたドロップ先の列の中で何番目か（moveCard と同じ数え方） */
 export interface Drop {

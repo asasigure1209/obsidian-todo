@@ -1,7 +1,7 @@
 import type { LineRef } from "@/domain/commands";
-import { type DayDocument, type TodoBlock, todoBlocks } from "@/domain/document";
-import type { Estimate, Status } from "@/domain/todo-line";
-import { type WorkKind, workLines } from "@/domain/work-entry";
+import { type DayDocument, type TodoBlock, todoBlocks } from "@/domain/document/body";
+import type { Estimate, Status } from "@/domain/document/todo-line";
+import { type WorkKind, workLines } from "@/domain/document/work-entry";
 
 /** 作業時間の1件。ref はそのまま作業時間のコマンドに渡せる（カードの中で n 番目の作業時間の行） */
 export interface WorkRecord {

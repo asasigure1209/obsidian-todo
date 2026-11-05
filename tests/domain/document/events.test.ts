@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseDocument } from "@/domain/document";
-import { eventLines } from "@/domain/events";
+import { parseDocument } from "@/domain/document/body";
+import { eventLines } from "@/domain/document/events";
 
 describe("eventLines", () => {
   it("frontmatter の events の各項目を文字列として取り出す", () => {

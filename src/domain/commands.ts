@@ -6,14 +6,14 @@ import {
   serializeDocument,
   type TodoBlock,
   todoBlocks,
-} from "@/domain/document";
+} from "@/domain/document/body";
 import {
   type Estimate,
   formatTodoLine,
   parseTodoLine,
   type Status,
   type TodoLine,
-} from "@/domain/todo-line";
+} from "@/domain/document/todo-line";
 import {
   childIndent,
   formatWorkEntry,
@@ -21,7 +21,7 @@ import {
   type WorkKind,
   type WorkLine,
   workLines,
-} from "@/domain/work-entry";
+} from "@/domain/document/work-entry";
 
 /** 操作の対象の行。n 番目の TODO ブロック（またはカードの中で n 番目の作業時間の行）と、その行の文字列（AD-5） */
 export interface LineRef {

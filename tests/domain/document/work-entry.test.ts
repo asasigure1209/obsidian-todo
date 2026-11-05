@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseDocument, type TodoBlock } from "@/domain/document";
-import { childIndent, formatWorkEntry, parseWorkEntry } from "@/domain/work-entry";
+import { parseDocument, type TodoBlock } from "@/domain/document/body";
+import { childIndent, formatWorkEntry, parseWorkEntry } from "@/domain/document/work-entry";
 
 describe("parseWorkEntry / formatWorkEntry", () => {
   it("字下げされた「{分}分 {種類} {メモ}」を作業時間として読む", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTodoLine, parseTodoLine } from "@/domain/todo-line";
+import { formatTodoLine, parseTodoLine } from "@/domain/document/todo-line";
 
 describe("parseTodoLine / formatTodoLine", () => {
   it("状態の記号を 今日やる・着手中・完了 として読む", () => {
