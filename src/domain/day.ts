@@ -5,3 +5,14 @@ export function toDayKey(date: Date): string {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+/** ボードの操作の種類。work は作業時間の追加・修正・削除（M2） */
+export type EditKind = "move" | "complete" | "add" | "work";
+
+/** 今日はすべて、過去の日は作業時間の修正だけ、未来の日は何もできない（design 8.3）。日付は `YYYY-MM-DD` なので文字列で比べられる */
+export function canEdit(kind: EditKind, dayKey: string, today: string): boolean {
+  if (dayKey > today) {
+    return false;
+  }
+  return dayKey === today || kind === "work";
+}

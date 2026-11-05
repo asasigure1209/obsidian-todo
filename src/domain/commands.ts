@@ -50,8 +50,9 @@ const INVALID: Rejection = { rejected: "invalid" };
 const UNSTABLE: Rejection = { rejected: "unstable" };
 const COLUMN_END = Number.POSITIVE_INFINITY;
 
-export function isRejection<T extends object>(result: T | Rejection): result is Rejection {
-  return "rejected" in result;
+/** コマンドの結果（DayDocument）にも、applyToBody の結果（本文の文字列）にも使える */
+export function isRejection<T extends object | string>(result: T | Rejection): result is Rejection {
+  return typeof result === "object" && "rejected" in result;
 }
 
 /** `vault.process` に渡す形。読み直すと区切りが変わる結果は書き込まない（AD-5 と同じく、ずれたら何もしない） */

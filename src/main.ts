@@ -1,6 +1,8 @@
 import { Plugin } from "obsidian";
 import { systemClock } from "@/adapters/clock";
+import { noticeNotifier } from "@/adapters/notifier";
 import { VaultDayFiles } from "@/adapters/vault";
+import type { BoardDeps } from "@/app/board-service";
 import { BOARD_ICON, BOARD_VIEW_TYPE, BoardView } from "@/ui/BoardView";
 
 const OPEN_BOARD_LABEL = "今日のボードを開く";
@@ -9,8 +11,13 @@ const TODO_FOLDER = "TODO";
 
 export default class DailyKanbanTodoPlugin extends Plugin {
   override async onload(): Promise<void> {
-    const files = new VaultDayFiles(this.app.vault, TODO_FOLDER);
-    this.registerView(BOARD_VIEW_TYPE, (leaf) => new BoardView(leaf, systemClock, files));
+    const deps: BoardDeps = {
+      files: new VaultDayFiles(this.app.vault, TODO_FOLDER),
+      clock: systemClock,
+      notifier: noticeNotifier,
+      onError: reportError,
+    };
+    this.registerView(BOARD_VIEW_TYPE, (leaf) => new BoardView(leaf, deps));
     this.addRibbonIcon(BOARD_ICON, OPEN_BOARD_LABEL, () => this.activateView());
     this.addCommand({
       id: "open-board",
@@ -34,4 +41,8 @@ export default class DailyKanbanTodoPlugin extends Plugin {
     await leaf.setViewState({ type: BOARD_VIEW_TYPE, active: true });
     await workspace.revealLeaf(leaf);
   }
+}
+
+function reportError(error: unknown): void {
+  console.error("[daily-kanban-todo]", error);
 }
