@@ -51,13 +51,11 @@ export const sortable: Action<HTMLElement, Options> = (node, initial) => {
 
 function toDrop(event: Sortable.SortableEvent): Drop | undefined {
   const { item, from, to, oldIndex, newIndex } = event;
-  const unchanged = from === to && oldIndex === newIndex;
+  const status = to.dataset.status as Status;
+  // 着手中の中の並べ替えは、位置を持たない着手中への移動（design 8.6）になり、ほかの着手中を今日やるへ戻してしまうので何もしない
+  const unchanged = from === to && (oldIndex === newIndex || status === "doing");
   if (newIndex === undefined || unchanged) {
     return undefined;
   }
-  return {
-    key: item.dataset.key ?? "",
-    status: to.dataset.status as Status,
-    position: newIndex,
-  };
+  return { key: item.dataset.key ?? "", status, position: newIndex };
 }

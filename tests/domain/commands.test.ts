@@ -306,6 +306,14 @@ describe("addWork / updateWork / removeWork（作業時間）", () => {
   });
 });
 
+describe("isRejection", () => {
+  it("書き戻した本文は断りではない。断りの理由を持つものだけが断り", () => {
+    expect(isRejection(run(board, (doc) => addTodo(doc, "a")))).toBe(false);
+    expect(isRejection(run(board, (doc) => addTodo(doc, "")))).toBe(true);
+    expect(isRejection(parseDocument(board))).toBe(false);
+  });
+});
+
 describe("コマンドの性質", () => {
   const status = fc.constantFrom<Status>("todo", "doing", "done");
   const position = fc.integer({ min: -1, max: 6 });

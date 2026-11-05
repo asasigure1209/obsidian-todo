@@ -13,6 +13,7 @@ export class FakeDayFiles implements DayFiles {
   private holdingWrites = false;
   private readonly heldWrites: Array<() => void> = [];
   failNextRead = false;
+  failNextWrite = false;
   /** 始まった書き込みの数 */
   startedWrites = 0;
 
@@ -33,6 +34,10 @@ export class FakeDayFiles implements DayFiles {
     this.startedWrites++;
     if (this.holdingWrites) {
       await new Promise<void>((resolve) => this.heldWrites.push(resolve));
+    }
+    if (this.failNextWrite) {
+      this.failNextWrite = false;
+      throw new Error("書けない");
     }
     const body = this.bodies.get(dayKey);
     if (body === undefined) {

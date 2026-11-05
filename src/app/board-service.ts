@@ -50,7 +50,8 @@ const REJECTION_MESSAGES: Record<Rejection["rejected"], string> = {
   unstable: "この操作をするとファイルの区切りが変わるため、取りやめました",
 };
 const PAST_DAY_MESSAGE = "過去の日は、作業時間の修正だけができます";
-const MISSING_MESSAGE = "今日のファイルがありません";
+const WRITE_FAILED_MESSAGE = "ファイルに書き込めませんでした";
+const missingMessage = (dayKey: string) => `${dayKey} のファイルがありません`;
 
 export function openBoard(deps: BoardDeps, dayKey: string): BoardSession {
   return new Session(deps, dayKey);
@@ -60,7 +61,8 @@ export function openBoard(deps: BoardDeps, dayKey: string): BoardSession {
  * - ファイルが変わるたびに読み直して流す（AD-2）。読み込みは追い越されることがあるので、最後に始めた読み込みの結果だけを使う
  * - 読めなかったときは前の状態のまま次の変更を待つ。まだ何も読めていなければ、読めなかったことを流す
  * - 操作は、最後に読んだ本文に当てた結果をすぐに流してから（先読み）、最新の本文に当てて書き込む（AD-3）。
- *   書き込みは1本に並べて順番に行い、終わるまでは読み直しの結果を捨てる。並びが空いたら読み直す
+ *   書き込みは1本に並べて順番に行い、終わるまでは読み直しの結果を捨てる。書き込みのたびに読み直す
+ * - 書き込みが断られたら（失敗も含む）、それより前に受けた操作は、断られた操作の先読みをもとにしているので書き込まずに捨てる
  */
 class Session implements BoardSession {
   private state = LOADING;
@@ -69,6 +71,8 @@ class Session implements BoardSession {
   private closed = false;
   private latest = 0;
   private pendingWrites = 0;
+  /** 書き込みが断られるたびに進める。進む前に受けた操作は捨てる */
+  private epoch = 0;
   private writes: Promise<void> = Promise.resolve();
   private readonly runs = new Set<(state: BoardState) => void>();
   private readonly stopListening: () => void;
@@ -104,9 +108,10 @@ class Session implements BoardSession {
       this.deps.notifier.notify(PAST_DAY_MESSAGE);
       return Promise.resolve();
     }
+    const epoch = this.epoch;
     this.preview(command);
     this.pendingWrites++;
-    this.writes = this.writes.then(() => this.write(command)).catch(this.deps.onError);
+    this.writes = this.writes.then(() => this.write(command, epoch)).catch(this.deps.onError);
     return this.writes;
   }
 
@@ -119,16 +124,34 @@ class Session implements BoardSession {
     }
   }
 
-  private async write(command: DocumentCommand): Promise<void> {
+  private async write(command: DocumentCommand, epoch: number): Promise<void> {
     try {
-      const message = await writeCommand(this.deps.files, this.dayKey, command);
-      if (message) {
-        this.deps.notifier.notify(message);
-      }
+      await this.writeInEpoch(command, epoch);
     } finally {
       // 書き込みが残っているうちの読み直しは load が捨てるので、毎回読み直してよい
       this.pendingWrites--;
       this.reload();
+    }
+  }
+
+  private async writeInEpoch(command: DocumentCommand, epoch: number): Promise<void> {
+    if (epoch !== this.epoch) {
+      return;
+    }
+    const message = await this.tryWrite(command);
+    if (message) {
+      this.epoch++;
+      this.deps.notifier.notify(message);
+    }
+  }
+
+  /** 書き込んで、知らせることがあればその文言を返す。書き込めなかった例外は onError にも渡す */
+  private async tryWrite(command: DocumentCommand): Promise<string | undefined> {
+    try {
+      return await writeCommand(this.deps.files, this.dayKey, command);
+    } catch (error) {
+      this.deps.onError(error);
+      return WRITE_FAILED_MESSAGE;
     }
   }
 
@@ -184,11 +207,14 @@ async function writeCommand(
   let rejection: Rejection | undefined;
   const found = await files.process(dayKey, (body) => {
     const next = applyToBody(body, command);
-    rejection = typeof next === "string" ? undefined : next;
-    return typeof next === "string" ? next : body;
+    if (isRejection(next)) {
+      rejection = next;
+      return body;
+    }
+    return next;
   });
   if (!found) {
-    return MISSING_MESSAGE;
+    return missingMessage(dayKey);
   }
   return rejection && REJECTION_MESSAGES[rejection.rejected];
 }

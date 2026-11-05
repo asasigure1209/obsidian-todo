@@ -315,6 +315,56 @@ describe("openBoard：カードを動かす", () => {
     expect(notices).toEqual(["ファイルが変わっていたので、操作を取りやめて読み直しました"]);
   });
 
+  it("先の操作が断られたら、その先読みをもとにした後の操作は書き込まず、知らせるのは1回だけ", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session, states, notices } = open(files);
+    await settle();
+    files.holdWrites();
+
+    void session.move(a, "done", 0);
+    void session.move(card(0, "- [ ] b"), "done", 0);
+    files.write(today, "- [ ] 先頭に足した\n- [ ] a\n- [ ] b\n");
+    await settle();
+    files.releaseWrite();
+    await settle();
+
+    expect(files.startedWrites).toBe(1);
+    expect(files.body(today)).toBe("- [ ] 先頭に足した\n- [ ] a\n- [ ] b\n");
+    expect(notices).toEqual(["ファイルが変わっていたので、操作を取りやめて読み直しました"]);
+    expect(states.at(-1)).toEqual(["先頭に足した,a,b", "", ""]);
+  });
+
+  it("断られた後の新しい操作は、読み直した表示に対して書き込む", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session, notices } = open(files);
+    await settle();
+
+    await session.move(card(0, "- [ ] 古い行"), "done", 0);
+    await settle();
+    await session.move(b, "done", 0);
+    await settle();
+
+    expect(files.body(today)).toBe("- [ ] a\n- [x] b\n- [x] c\n");
+    expect(notices).toHaveLength(1);
+  });
+
+  it("書き込みに失敗したら、知らせて例外を onError に渡し、読み直した表示に戻る", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session, states, notices, errors } = open(files);
+    await settle();
+
+    files.failNextWrite = true;
+    await session.move(a, "done", 0);
+    await settle();
+
+    expect(notices).toEqual(["ファイルに書き込めませんでした"]);
+    expect(errors).toHaveLength(1);
+    expect(states.at(-1)).toEqual(["a,b", "", "c"]);
+  });
+
   it("読み直すと区切りが変わる操作は、知らせて取りやめる", async () => {
     const files = new FakeDayFiles();
     const unstable = "- [ ] a\n---\nメモ\n---\n";
@@ -349,7 +399,7 @@ describe("openBoard：カードを動かす", () => {
 
     await session.move(a, "done", 0);
 
-    expect(notices).toEqual(["今日のファイルがありません"]);
+    expect(notices).toEqual(["2026-11-05 のファイルがありません"]);
   });
 
   it("閉じた後の操作は何もしない", async () => {
