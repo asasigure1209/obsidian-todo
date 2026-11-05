@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Board, toBoard } from "@/domain/board";
-import { isRejection, moveCard } from "@/domain/commands";
+import { editWork, isRejection, type LineRef, moveCard } from "@/domain/commands";
 import { parseDocument, todoBlocks } from "@/domain/document";
 import { markdownLike } from "./arbitraries";
 
@@ -30,6 +30,29 @@ const names = (b: Board) => ({
 const allCards = (b: Board) => [...b.todo, ...b.doing, ...b.done];
 
 describe("toBoard", () => {
+  it("カードは作業時間の記録を本文の順番で持ち、各記録の ref はそのまま作業時間のコマンドに渡せる", () => {
+    const body = `- [x] メールの返信
+    - 25分 ポモドーロ
+    参考: 30分 くらい
+    - 12分 中断 チャットでの問い合わせ
+`;
+    const doc = parseDocument(body);
+    const [card] = toBoard(doc).done;
+
+    expect(card?.entries).toStrictEqual([
+      { ref: { index: 0, text: "    - 25分 ポモドーロ" }, minutes: 25, kind: "ポモドーロ" },
+      {
+        ref: { index: 1, text: "    - 12分 中断 チャットでの問い合わせ" },
+        minutes: 12,
+        kind: "中断",
+        memo: "チャットでの問い合わせ",
+      },
+    ]);
+    const entry = card?.entries[1]?.ref as LineRef;
+    const edits = { updated: [], removed: [entry], added: [] };
+    expect(isRejection(editWork(doc, card?.ref as LineRef, edits))).toBe(false);
+  });
+
   it("TODO 行を状態ごとに 今日やる・着手中・完了 の列へ分ける", () => {
     expect(names(boardOf(board))).toEqual({
       todo: ["API設計レビューの指摘に対応", "見積もりの返信を書く"],

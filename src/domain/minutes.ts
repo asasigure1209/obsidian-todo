@@ -10,3 +10,8 @@ export function recordableMinutes(startedAt: number, now: number): number {
   const elapsed = Math.floor((now - startedAt) / MINUTE_MS);
   return Math.min(Math.max(elapsed, 0), POMODORO_MINUTES);
 }
+
+/** 分数をポモドーロに換算する（M2 の合計）。小数1桁に四捨五入 */
+export function pomodoroEquivalent(minutes: number): number {
+  return Math.round((minutes / POMODORO_MINUTES) * 10) / 10;
+}

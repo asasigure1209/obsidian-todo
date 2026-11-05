@@ -12,9 +12,10 @@ interface Props {
   running: RunningCard | undefined;
   session: BoardSession;
   onDrop: (drop: Drop) => void;
+  openWork: (card: CardModel) => void;
 }
 
-const { title, status, cards, running, session, onDrop }: Props = $props();
+const { title, status, cards, running, session, onDrop, openWork }: Props = $props();
 </script>
 
 <section class="column">
@@ -32,6 +33,7 @@ const { title, status, cards, running, session, onDrop }: Props = $props();
           {card}
           {status}
           {session}
+          {openWork}
           position={i + 1}
           running={running?.key === card.key ? running : undefined}
         />

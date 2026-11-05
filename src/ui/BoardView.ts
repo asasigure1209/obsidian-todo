@@ -1,8 +1,10 @@
-import { ItemView, type WorkspaceLeaf } from "obsidian";
+import { type App, ItemView, Modal, type WorkspaceLeaf } from "obsidian";
 import { mount, unmount } from "svelte";
 import { type BoardDeps, type BoardSession, openBoard } from "@/app/board-service";
+import type { Card } from "@/domain/board";
 import { toDayKey } from "@/domain/day";
 import Board from "./Board.svelte";
+import WorkDialog from "./WorkDialog.svelte";
 
 export const BOARD_VIEW_TYPE = "daily-kanban-todo-board";
 export const BOARD_ICON = "square-kanban";
@@ -11,6 +13,8 @@ export class BoardView extends ItemView {
   private board: ReturnType<typeof mount> | undefined;
   private session: BoardSession | undefined;
   private dayKey: string | undefined;
+  /** 開いている M2 のダイアログ。ボードを閉じたり作り直したりするときに一緒に閉じる（閉じた session に保存させない） */
+  private workModal: WorkModal | undefined;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -55,16 +59,57 @@ export class BoardView extends ItemView {
     this.session = session;
     this.board = mount(Board, {
       target: this.contentEl,
-      props: { dayKey, session },
+      props: {
+        dayKey,
+        session,
+        openWork: (card: Card) => this.openWork(session, card),
+      },
     });
   }
 
+  private openWork(session: BoardSession, card: Card): void {
+    this.workModal?.close();
+    this.workModal = new WorkModal(this.app, session, card);
+    this.workModal.open();
+  }
+
   private async unmountBoard(): Promise<void> {
+    this.workModal?.close();
+    this.workModal = undefined;
     this.session?.close();
     this.session = undefined;
     if (this.board) {
       await unmount(this.board);
       this.board = undefined;
+    }
+  }
+}
+
+/** M2「作業時間を修正」。Obsidian のダイアログの中に WorkDialog を置く */
+class WorkModal extends Modal {
+  private dialog: ReturnType<typeof mount> | undefined;
+
+  constructor(
+    app: App,
+    private readonly session: BoardSession,
+    private readonly card: Card,
+  ) {
+    super(app);
+  }
+
+  override onOpen(): void {
+    // 見出しとカード名はモックどおりに WorkDialog が出す。閉じるボタン（×）は Obsidian のものを使う
+    this.modalEl.addClass("daily-kanban-todo-work-modal");
+    this.dialog = mount(WorkDialog, {
+      target: this.contentEl,
+      props: { card: this.card, session: this.session, close: () => this.close() },
+    });
+  }
+
+  override onClose(): void {
+    if (this.dialog) {
+      void unmount(this.dialog);
+      this.dialog = undefined;
     }
   }
 }

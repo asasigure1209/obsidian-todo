@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { isRejection, type LineRef } from "@/domain/commands";
+import { editWork, isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
 import { parseDocument, parseWorkEntry, serializeDocument, todoBlocks } from "@/domain/document";
 import {
   parseTimer,
@@ -236,6 +236,44 @@ describe("stepTimer（design 8.1）", () => {
   });
 });
 
+describe("stepTimer：本文だけの変更（M2 の保存など）", () => {
+  const entry = { index: 0, text: "    - 25分 ポモドーロ" };
+  const edits = { updated: [{ entry, minutes: 20 }], removed: [], added: [5] };
+  const editOf = (target: LineRef, workEdits: WorkEdits): TimerOp => ({
+    kind: "edit",
+    command: (doc) => editWork(doc, target, workEdits),
+  });
+
+  it("本文だけの変更は本文に当てるだけで、計測は変えない", () => {
+    const result = step(running(), editOf(proposal, edits), at(30));
+
+    expect(result.written).toBe(`- [/] 提案資料 [est:: 3]
+    - 20分 手動
+    - 5分 手動
+- [ ] レビュー対応
+- [x] 経費精算
+`);
+    expect(result.timer).toEqual(running());
+  });
+
+  it("対象が見つからなくても、本文だけの変更では判定しない（保留にも、捨てもしない）", () => {
+    const renamed = board.replace("- [/] 提案資料 [est:: 3]", "- [/] 提案資料の構成 [est:: 3]");
+    const held = running({ held: true });
+
+    const result = step(held, editOf(review, { ...edits, updated: [] }), at(3), renamed);
+
+    expect(result.timer).toEqual(held);
+    expect(result.notice).toBeUndefined();
+  });
+
+  it("変更できなければ断り、計測は変えない", () => {
+    const result = step(running(), editOf(review, edits), at(3));
+
+    expect(result.result).toEqual({ rejected: "stale" });
+    expect(result.timer).toEqual(running());
+  });
+});
+
 describe("stepTimer：対象が見つからないとき（AD-6）", () => {
   const renamed = board.replace("- [/] 提案資料 [est:: 3]", "- [/] 提案資料の構成 [est:: 3]");
   const twoDoing = board.replace("- [ ] レビュー対応", "- [/] レビュー対応");
@@ -368,6 +406,47 @@ describe("stepTimer の性質", () => {
             expect(minutesRecorded).toBeGreaterThanOrEqual(1);
             expect(minutesRecorded).toBeLessThanOrEqual(25);
           }
+        },
+      ),
+    );
+  });
+});
+
+describe("stepTimer の性質：本文だけの変更", () => {
+  const withEditOp = markdownLike.chain((body) => {
+    const refs = todoBlocks(parseDocument(body).segments).map((block, index) =>
+      card(index, block.head.text),
+    );
+    const ref = refs.length > 0 ? fc.constantFrom(...refs) : fc.constant(card(0, "- [ ] なし"));
+    const edits: fc.Arbitrary<WorkEdits> = fc.record({
+      updated: fc.constant([]),
+      removed: fc.constant([]),
+      added: fc.array(fc.integer({ min: 1, max: 60 }), { maxLength: 3 }),
+    });
+    return fc.tuple(
+      fc.constant(body),
+      fc.tuple(ref, edits).map(
+        ([target, workEdits]): TimerOp => ({
+          kind: "edit",
+          command: (doc) => editWork(doc, target, workEdits),
+        }),
+      ),
+    );
+  });
+
+  it("どんな本文とタイマーでも、本文だけの変更ではタイマーは変わらず、知らせることもない", () => {
+    fc.assert(
+      fc.property(
+        withEditOp,
+        fc.option(fc.constantFrom(...markdownTexts()), { nil: undefined }),
+        fc.boolean(),
+        fc.integer({ min: 0, max: 120 }),
+        ([body, op], text, held, minutes) => {
+          const timer = text === undefined ? undefined : running({ text, held });
+          const result = stepTimer(timer, parseDocument(body), day, op, at(minutes));
+
+          expect(result.timer).toBe(timer);
+          expect(result.notice).toBeUndefined();
         },
       ),
     );

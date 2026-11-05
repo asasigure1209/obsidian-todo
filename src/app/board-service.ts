@@ -1,7 +1,7 @@
 import type { DayEditor } from "@/app/day-editor";
 import { type Board, toBoard } from "@/domain/board";
 import type { Clock } from "@/domain/clock";
-import { isRejection, type LineRef } from "@/domain/commands";
+import { editWork, isRejection, type LineRef, type WorkEdits } from "@/domain/commands";
 import { canEdit, type EditKind, toDayKey } from "@/domain/day";
 import type { DayFiles } from "@/domain/day-files";
 import { type DayDocument, parseDocument, type Status } from "@/domain/document";
@@ -26,16 +26,18 @@ export type BoardState =
   | { kind: "unreadable" }
   | { kind: "board"; board: Board; running?: RunningCard };
 
-/** 1日のボードの窓口。表示する状態と、ボードからの操作をまとめて持つ */
+/** 1日のボードの窓口。表示する状態と、ボードからの操作をまとめて持つ。操作は、書き込めたら true で終わる */
 export interface BoardSession extends Readable<BoardState> {
   /** カードを列の中の位置へ動かす（design 8.6）。着手中へ動かすと計測が始まる（design 8.1） */
-  move(card: LineRef, status: Status, position: number): Promise<void>;
+  move(card: LineRef, status: Status, position: number): Promise<boolean>;
   /** 「完了にする」 */
-  complete(card: LineRef): Promise<void>;
+  complete(card: LineRef): Promise<boolean>;
   /** 「中断（割り込み）」 */
-  interrupt(): Promise<void>;
+  interrupt(): Promise<boolean>;
   /** 「次のポモドーロを開始」 */
-  next(card: LineRef): Promise<void>;
+  next(card: LineRef): Promise<boolean>;
+  /** M2 の「保存」。書き込めたら true、断られたり取りやめたりしたら false（ダイアログを開いたままにする） */
+  editWork(card: LineRef, edits: WorkEdits): Promise<boolean>;
   /** 変更の購読をやめ、以後の読み込みと操作を何もしない */
   close(): void;
 }
@@ -92,20 +94,24 @@ class Session implements BoardSession {
     return () => this.runs.delete(run);
   }
 
-  move(card: LineRef, status: Status, position: number): Promise<void> {
+  move(card: LineRef, status: Status, position: number): Promise<boolean> {
     return this.edit("move", { kind: "move", card, status, position });
   }
 
-  complete(card: LineRef): Promise<void> {
+  complete(card: LineRef): Promise<boolean> {
     return this.edit("complete", { kind: "complete", card });
   }
 
-  interrupt(): Promise<void> {
+  interrupt(): Promise<boolean> {
     return this.edit("interrupt", { kind: "interrupt" });
   }
 
-  next(card: LineRef): Promise<void> {
+  next(card: LineRef): Promise<boolean> {
     return this.edit("move", { kind: "next", card });
+  }
+
+  editWork(card: LineRef, edits: WorkEdits): Promise<boolean> {
+    return this.edit("work", { kind: "edit", command: (doc) => editWork(doc, card, edits) });
   }
 
   close(): void {
@@ -113,21 +119,28 @@ class Session implements BoardSession {
     this.stopListening();
   }
 
-  private edit(kind: EditKind, op: TimerOp): Promise<void> {
+  /** 書き込めたら true */
+  private edit(kind: EditKind, op: TimerOp): Promise<boolean> {
     if (this.closed) {
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
     if (!canEdit(kind, this.dayKey, toDayKey(this.deps.clock.now()))) {
       this.deps.notifier.notify(PAST_DAY_MESSAGE);
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
     const epoch = this.epoch;
     this.preview(op);
     this.pendingWrites++;
     return this.deps.editor
       .edit(this.dayKey, op, () => epoch === this.epoch)
-      .then((outcome) => this.afterWrite(outcome === "refused"))
-      .catch(this.deps.onError);
+      .then((outcome) => {
+        this.afterWrite(outcome === "refused");
+        return outcome === "done";
+      })
+      .catch((error: unknown) => {
+        this.deps.onError(error);
+        return false;
+      });
   }
 
   /** 書き込みが残っているうちの読み直しは load が捨てるので、毎回読み直してよい */

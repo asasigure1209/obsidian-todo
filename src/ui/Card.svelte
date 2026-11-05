@@ -12,9 +12,11 @@ interface Props {
   /** このカードを計測中なら、その開始時刻と何個目か */
   running: RunningCard | undefined;
   session: BoardSession;
+  /** 「時間を修正」（M2） */
+  openWork: (card: Card) => void;
 }
 
-const { card, status, position, running, session }: Props = $props();
+const { card, status, position, running, session, openWork }: Props = $props();
 </script>
 
 <article class="card" class:done={status === "done"}>
@@ -23,14 +25,17 @@ const { card, status, position, running, session }: Props = $props();
   {/if}
   <div class="body">
     <p class="name">{card.name}</p>
-    <p class="meta">
-      {#if status !== "todo"}
-        <span>作業 {card.workedMinutes}分</span>
-      {/if}
-      {#if card.estimate}
-        <span>見積 {card.estimate}</span>
-      {/if}
-    </p>
+    <div class="meta">
+      <span class="figures">
+        {#if status !== "todo"}
+          <span>{status === "done" ? "実績" : "作業"} {card.workedMinutes}分</span>
+        {/if}
+        {#if card.estimate}
+          <span>見積 {card.estimate}</span>
+        {/if}
+      </span>
+      <button type="button" class="work-link" onclick={() => openWork(card)}>時間を修正</button>
+    </div>
     {#if status === "doing"}
       {#if running}
         <Timer startedAt={running.startedAt} count={running.count} />
@@ -87,14 +92,41 @@ const { card, status, position, running, session }: Props = $props();
 
 .meta {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: var(--size-4-2);
-  margin: 0;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
 
-.meta:empty {
-  display: none;
+.figures {
+  display: flex;
+  gap: var(--size-4-2);
+}
+
+.done .figures {
+  gap: var(--size-2-2);
+  color: var(--text-normal);
+}
+
+/* 完了は「実績 N分 ／ 見積 Y」と並べる（モック） */
+.done .figures span + span::before {
+  content: "／ ";
+}
+
+.work-link {
+  height: auto;
+  padding: var(--size-2-3) var(--size-4-2);
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: var(--text-accent);
+  font-size: var(--font-ui-smaller);
+  cursor: pointer;
+}
+
+.work-link:hover {
+  text-decoration: underline;
 }
 
 .actions {
