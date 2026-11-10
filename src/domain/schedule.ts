@@ -1,6 +1,6 @@
 import type { DayDocument } from "@/domain/document/body";
 import { eventLines } from "@/domain/document/events";
-import { POMODORO_MINUTES } from "@/domain/minutes";
+import { HOUR_MINUTES, POMODORO_MINUTES } from "@/domain/minutes";
 
 /** 時刻の範囲。どちらも0時からの分数で、end は含まない */
 export interface TimeRange {
@@ -21,13 +21,13 @@ export interface Workday {
 
 /** 設定画面ができるまでの既定値。9:00〜18:00、休憩 12:00〜13:00 */
 export const DEFAULT_WORKDAY: Workday = {
-  hours: { start: 9 * 60, end: 18 * 60 },
-  breaks: [{ start: 12 * 60, end: 13 * 60 }],
+  hours: { start: 9 * HOUR_MINUTES, end: 18 * HOUR_MINUTES },
+  breaks: [{ start: 12 * HOUR_MINUTES, end: 13 * HOUR_MINUTES }],
 };
 
-// 予定名は最後の空白でない文字まで（行末の空白は予定名に入れない）
-const EVENT_LINE = /^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2}) (.*\S)/;
-const HOUR = 60;
+// 予定名は時刻の後の空白を飛ばした最初の文字から、最後の空白でない文字まで（前後の空白は予定名に入れない）
+const EVENT_LINE = /^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2}) +(\S.*\S|\S)/;
+const HOUR = HOUR_MINUTES;
 
 /** `HH:MM-HH:MM 予定名` を読む。書式に合わない行、ありえない時刻、終わりが始まり以前の行は予定にしない */
 export function parseEvent(line: string): ScheduledEvent | undefined {
@@ -59,19 +59,36 @@ export function focusMinutes(events: TimeRange[], workday: Workday, now: number)
   return busy.reduce((rest, range) => rest - (range.end - range.start), total);
 }
 
-/** 表示の丸め。時間は 0.5時間刻みで切り捨て、ポモドーロは25分で割って切り捨てる（多めに出さない） */
-export function focusSummary(minutes: number): { hours: number; pomodoros: number } {
+/** 集中できる時間の表示。就業終了の後は ended、それまでは約何時間・何ポモドーロか */
+export type Focus = { kind: "ended" } | { kind: "open"; hours: number; pomodoros: number };
+
+/** 時間は 0.5時間刻みで切り捨て、ポモドーロは25分で割って切り捨てる（多めに出さない） */
+export function focus(events: TimeRange[], workday: Workday, now: number): Focus {
+  if (now >= workday.hours.end) {
+    return { kind: "ended" };
+  }
+  const minutes = focusMinutes(events, workday, now);
   return {
+    kind: "open",
     hours: Math.floor(minutes / (HOUR / 2)) / 2,
     pomodoros: Math.floor(minutes / POMODORO_MINUTES),
   };
 }
 
-/** 目盛りを引く毎正時（時） */
-export function hourMarks(hours: TimeRange): number[] {
+/** 目盛り。top は就業開始からの分数 */
+export interface HourMark {
+  hour: number;
+  top: number;
+}
+
+/** 就業時間の中の毎正時 */
+export function hourMarks(hours: TimeRange): HourMark[] {
   const first = Math.ceil(hours.start / HOUR);
   const last = Math.floor(hours.end / HOUR);
-  return Array.from({ length: Math.max(0, last - first + 1) }, (_, i) => first + i);
+  return Array.from({ length: Math.max(0, last - first + 1) }, (_, i) => ({
+    hour: first + i,
+    top: (first + i) * HOUR - hours.start,
+  }));
 }
 
 /** 予定のブロック。top と height は就業開始からの分数で、就業時間からはみ出す分は切る */
@@ -94,6 +111,11 @@ export function timelineBlocks(events: ScheduledEvent[], hours: TimeRange): Time
 /** 現在時刻の線の位置（就業開始からの分数）。就業時間の外なら引かない */
 export function nowOffset(now: number, hours: TimeRange): number | undefined {
   return now >= hours.start && now <= hours.end ? now - hours.start : undefined;
+}
+
+/** 0時からの分数を「時:分」に（9:05） */
+export function formatClock(minutes: number): string {
+  return `${Math.floor(minutes / HOUR)}:${String(minutes % HOUR).padStart(2, "0")}`;
 }
 
 /** 0時からの分数 */

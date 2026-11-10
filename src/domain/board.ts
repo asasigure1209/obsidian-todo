@@ -95,6 +95,5 @@ export function runningCard(
 export function toBoardView(doc: DayDocument, timer: Timer, dayKey: string): BoardView {
   const board = toBoard(doc);
   const running = runningCard(board, runningTarget(timer, doc, dayKey));
-  const events = scheduledEvents(doc);
-  return running ? { board, running, events } : { board, events };
+  return { board, events: scheduledEvents(doc), ...(running && { running }) };
 }

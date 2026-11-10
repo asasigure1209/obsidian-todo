@@ -1,72 +1,75 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import { toDayKey } from "@/domain/day";
+import { HOUR_MINUTES } from "@/domain/minutes";
 import {
-  DEFAULT_WORKDAY,
-  focusMinutes,
-  focusSummary,
+  focus,
+  formatClock,
   hourMarks,
   minuteOfDay,
   nowOffset,
   type ScheduledEvent,
   timelineBlocks,
+  type Workday,
 } from "@/domain/schedule";
 
 interface Props {
   dayKey: string;
   events: ScheduledEvent[];
+  /** 就業時間と休憩（design 8.2）。設定画面ができるまでは既定値 */
+  workday: Workday;
+  /** 現在時刻の取得元。ボードと同じ時計を使う */
+  now: () => Date;
 }
 
-const { dayKey, events }: Props = $props();
+const { dayKey, events, workday, now: readNow }: Props = $props();
 
 /** モックの目盛りの間隔（1時間あたりの高さ） */
 const HOUR_PX = 44;
-const PX_PER_MINUTE = HOUR_PX / 60;
-/** 設定画面ができるまでは既定値（design 8.2） */
-const workday = DEFAULT_WORKDAY;
-const { hours } = workday;
+const PX_PER_MINUTE = HOUR_PX / HOUR_MINUTES;
+/** 短い予定でも予定名が読めるよう、ブロックは1行分より低くしない */
+const MIN_BLOCK_PX = 18;
 
-/** 表示のためだけの現在時刻。日付をまたいだら、今日でなくなったボードから線と箱が消える */
-let now = $state(new Date());
+/** 表示のためだけの現在時刻。毎秒読むので、分の変わり目や日付をまたいだときに遅れない */
+let now = $state(untrack(() => readNow()));
 
 $effect(() => {
   const id = window.setInterval(() => {
-    now = new Date();
-  }, 30_000);
+    now = readNow();
+  }, 1000);
   return () => window.clearInterval(id);
 });
 
+const hours = $derived(workday.hours);
 const isToday = $derived(toDayKey(now) === dayKey);
 const minute = $derived(minuteOfDay(now));
 const nowTop = $derived(isToday ? nowOffset(minute, hours) : undefined);
-const summary = $derived(focusSummary(focusMinutes(events, workday, minute)));
-
-const label = (hour: number) => `${hour}:00`;
-const clock = (minutes: number) =>
-  `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
+const summary = $derived(focus(events, workday, minute));
 </script>
 
 <section class="schedule">
-  <h2 class="heading">今日の予定（Googleカレンダー）</h2>
+  <h2 class="heading">{isToday ? "今日の予定" : "予定"}（Googleカレンダー）</h2>
   <div class="timeline" style:height="{(hours.end - hours.start) * PX_PER_MINUTE}px">
-    {#each hourMarks(hours) as hour (hour)}
-      <div class="mark" style:top="{(hour * 60 - hours.start) * PX_PER_MINUTE}px">
-        <span class="mark-label">{label(hour)}</span>
+    {#each hourMarks(hours) as mark (mark.hour)}
+      <div class="mark" style:top="{mark.top * PX_PER_MINUTE}px">
+        <span class="mark-label">{mark.hour}:00</span>
         <div class="mark-line"></div>
       </div>
     {/each}
-    {#each timelineBlocks(events, hours) as block, i (i)}
+    <!-- 同じ時刻と名前の予定が2件あってもよいので、キーは付けない -->
+    {#each timelineBlocks(events, hours) as block}
       <div
         class="event"
         style:top="{block.top * PX_PER_MINUTE}px"
-        style:height="{block.height * PX_PER_MINUTE}px"
+        style:height="{Math.max(block.height * PX_PER_MINUTE, MIN_BLOCK_PX)}px"
       >
         <span class="event-title">{block.event.title}</span>
-        <span class="event-time">{clock(block.event.start)}</span>
+        <span class="event-time">{formatClock(block.event.start)}</span>
       </div>
     {/each}
     {#if nowTop !== undefined}
       <div class="now" style:top="{nowTop * PX_PER_MINUTE}px">
-        <span class="visually-hidden">現在時刻 {clock(minute)}</span>
+        <span class="visually-hidden">現在時刻 {formatClock(minute)}</span>
         <span class="now-dot"></span>
         <div class="now-line"></div>
       </div>
@@ -74,7 +77,7 @@ const clock = (minutes: number) =>
   </div>
   {#if isToday}
     <p class="focus">
-      {#if minute >= hours.end}
+      {#if summary.kind === "ended"}
         今日の就業時間は終わりました
       {:else}
         この後、予定の合間で集中できるのは約 {summary.hours}時間（{summary.pomodoros}ポモドーロ）

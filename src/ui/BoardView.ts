@@ -3,6 +3,7 @@ import { type Component, mount, unmount } from "svelte";
 import { type BoardDeps, type BoardSession, openBoard } from "@/app/board/session";
 import type { Card } from "@/domain/board";
 import { toDayKey } from "@/domain/day";
+import { DEFAULT_WORKDAY } from "@/domain/schedule";
 import AddTodoDialog from "./AddTodoDialog.svelte";
 import Board from "./Board.svelte";
 import WorkDialog from "./WorkDialog.svelte";
@@ -70,6 +71,9 @@ export class BoardView extends ItemView {
               card,
             }),
           ),
+        // 設定画面ができたら、ここを設定の値に替える（design 8.2）
+        workday: DEFAULT_WORKDAY,
+        now: () => this.deps.clock.now(),
         openAdd: () =>
           this.openModal(
             new SvelteModal(this.app, AddTodoDialog, "daily-kanban-todo-add-modal", { session }),

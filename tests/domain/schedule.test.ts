@@ -1,10 +1,12 @@
+import { markdownLike } from "@tests/domain/document/arbitraries";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "@/domain/document/body";
 import {
   DEFAULT_WORKDAY,
+  focus,
   focusMinutes,
-  focusSummary,
+  formatClock,
   hourMarks,
   minuteOfDay,
   nowOffset,
@@ -40,8 +42,9 @@ describe("parseEvent（予定の行。design 7.3）", () => {
     expect(parseEvent("9:05-9:20 朝会")).toEqual(event(at(9, 5), at(9, 20), "朝会"));
   });
 
-  it("予定名の後ろの空白は予定名に入れない", () => {
+  it("予定名の前後の空白は予定名に入れない", () => {
     expect(parseEvent("10:00-11:00 定例  ")).toEqual(event(at(10), at(11), "定例"));
+    expect(parseEvent("10:00-11:00   定例")).toEqual(event(at(10), at(11), "定例"));
   });
 
   it.each([
@@ -60,6 +63,18 @@ describe("parseEvent（予定の行。design 7.3）", () => {
 });
 
 describe("scheduledEvents", () => {
+  it("どんな本文でも、読めた予定は0時から24時の中で、始まりが終わりより前", () => {
+    fc.assert(
+      fc.property(markdownLike, (body) => {
+        for (const { start, end } of scheduledEvents(parseDocument(body))) {
+          expect(start).toBeGreaterThanOrEqual(0);
+          expect(start).toBeLessThan(end);
+          expect(end).toBeLessThan(24 * 60);
+        }
+      }),
+    );
+  });
+
   it("frontmatter の events から、読める予定だけを書いた順に取り出す", () => {
     const doc = parseDocument(
       "---\nevents:\n  - 14:00-15:00 レビュー\n  - 終日 休み\n  - 10:00-11:00 定例\n---\n",
@@ -123,22 +138,46 @@ describe("focusMinutes（この後、集中できる時間。design 8.2）", () 
   });
 });
 
-describe("focusSummary（表示の丸め）", () => {
+describe("focus（集中できる時間の表示）", () => {
+  /** 予定がなく、休憩もない日の 18:00 の minutes 分前 */
+  const before = (minutes: number) => focus([], { ...workday, breaks: [] }, at(18) - minutes);
+
   it.each([
     [230, 3.5, 9],
     [210, 3.5, 8],
     [209, 3, 8],
     [29, 0, 1],
-    [0, 0, 0],
-  ])("%d分は約 %d時間（%dポモドーロ）", (minutes, hours, pomodoros) => {
-    expect(focusSummary(minutes)).toEqual({ hours, pomodoros });
+    [1, 0, 0],
+  ])(
+    "%d分は約 %d時間（%dポモドーロ）。時間は0.5時間刻み、ポモドーロは25分で切り捨て",
+    (minutes, hours, pomodoros) => {
+      expect(before(minutes)).toEqual({ kind: "open", hours, pomodoros });
+    },
+  );
+
+  it("就業終了の時刻からは、就業時間が終わったことを示す", () => {
+    expect(focus([], workday, at(18))).toEqual({ kind: "ended" });
+    expect(focus([], workday, at(23, 59))).toEqual({ kind: "ended" });
+  });
+});
+
+describe("formatClock", () => {
+  it("0時からの分数を「時:分」にする", () => {
+    expect(formatClock(at(9, 5))).toBe("9:05");
+    expect(formatClock(at(13, 30))).toBe("13:30");
+    expect(formatClock(0)).toBe("0:00");
   });
 });
 
 describe("タイムラインの配置", () => {
   it("目盛りは就業時間の中の毎正時", () => {
-    expect(hourMarks(workday.hours)).toEqual([9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
-    expect(hourMarks({ start: at(8, 30), end: at(10, 30) })).toEqual([9, 10]);
+    expect(hourMarks(workday.hours).map((mark) => mark.hour)).toEqual([
+      9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+    ]);
+    expect(hourMarks({ start: at(8, 30), end: at(10, 30) })).toEqual([
+      { hour: 9, top: 30 },
+      { hour: 10, top: 90 },
+    ]);
   });
 
   it("予定は就業開始からの位置と長さ。就業時間からはみ出す分は切り、外の予定は描かない", () => {
