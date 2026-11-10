@@ -215,6 +215,14 @@ describe("toBoardView", () => {
     expect(view.running).toEqual({ key: "- [/] 提案資料#0", startedAt: 0, count: 1 });
   });
 
+  it("その日の予定を、読める行だけ書いた順に持つ", () => {
+    const doc = parseDocument(`---\nevents:\n  - 10:00-11:00 定例\n  - 終日 休み\n---\n${body}`);
+
+    expect(toBoardView(doc, undefined, "2026-11-05").events).toEqual([
+      { start: 600, end: 660, title: "定例" },
+    ]);
+  });
+
   it("ほかの日のタイマーなら、計測中のカードを示さない", () => {
     const view = toBoardView(parseDocument(body), timer, "2026-11-06");
     expect(view).not.toHaveProperty("running");

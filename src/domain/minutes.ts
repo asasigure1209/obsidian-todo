@@ -1,4 +1,5 @@
 export const POMODORO_MINUTES = 25;
+export const HOUR_MINUTES = 60;
 export const MINUTE_MS = 60_000;
 export const POMODORO_MS = POMODORO_MINUTES * MINUTE_MS;
 
