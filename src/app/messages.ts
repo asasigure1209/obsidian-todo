@@ -1,7 +1,7 @@
 import type { Rejection } from "@/domain/commands/command";
 import { parseTodoLine } from "@/domain/document/todo-line";
 
-/** 利用者への知らせの文言。day-editor と board/session が使う */
+/** 利用者への知らせの文言。day-editor・board/session・BoardView が使う */
 
 export const REJECTION_MESSAGES: Record<Rejection["rejected"], string> = {
   stale: "ファイルが変わっていたので、操作を取りやめて読み直しました",
@@ -15,3 +15,4 @@ export const DISCARDED_MESSAGE =
   "着手中のカードが見つからないため、計測を取りやめました（記録していません）";
 export const missingMessage = (dayKey: string) => `${dayKey} のファイルがありません`;
 export const PAST_DAY_MESSAGE = "過去の日は、作業時間の修正だけができます";
+export const WORK_LOG_FAILED_MESSAGE = "作業ログを開けませんでした";

@@ -1,6 +1,6 @@
 import type { DayDocument } from "@/domain/document/body";
 import { eventLines } from "@/domain/document/events";
-import { HOUR_MINUTES, POMODORO_MINUTES } from "@/domain/minutes";
+import { HOUR_MINUTES, toPomodoros } from "@/domain/minutes";
 
 /** 時刻の範囲。どちらも0時からの分数で、end は含まない */
 export interface TimeRange {
@@ -71,8 +71,21 @@ export function focus(events: TimeRange[], workday: Workday, now: number): Focus
   return {
     kind: "open",
     hours: Math.floor(minutes / (HOUR / 2)) / 2,
-    pomodoros: Math.floor(minutes / POMODORO_MINUTES),
+    pomodoros: toPomodoros(minutes),
   };
+}
+
+/**
+ * その日に可能なポモドーロ数（ヘッダーの分母）。就業時間の全体から予定と休憩を除き、25分で割って切り捨てる。
+ * 今の時刻に左右されないので、1日の中で変わらない
+ */
+export function dayPomodoroCapacity(events: TimeRange[], workday: Workday): number {
+  return toPomodoros(focusMinutes(events, workday, workday.hours.start));
+}
+
+/** 進捗バーの割合（0〜1）。可能な数を超えても満たすだけで、可能な数が 0 なら空のまま */
+export function focusProgress(done: number, capacity: number): number {
+  return capacity > 0 ? Math.min(done / capacity, 1) : 0;
 }
 
 /** 目盛り。top は就業開始からの分数 */

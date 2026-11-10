@@ -1,6 +1,4 @@
 <script lang="ts">
-import { untrack } from "svelte";
-import { toDayKey } from "@/domain/day";
 import { HOUR_MINUTES } from "@/domain/minutes";
 import {
   focus,
@@ -14,15 +12,16 @@ import {
 } from "@/domain/schedule";
 
 interface Props {
-  dayKey: string;
   events: ScheduledEvent[];
   /** 就業時間と休憩（design 8.2）。設定画面ができるまでは既定値 */
   workday: Workday;
-  /** 現在時刻の取得元。ボードと同じ時計を使う */
-  now: () => Date;
+  /** 表示のための現在時刻。Board が毎秒読んで渡す */
+  now: Date;
+  /** 今日のボードか。現在時刻の線と集中できる時間は今日だけに出す */
+  isToday: boolean;
 }
 
-const { dayKey, events, workday, now: readNow }: Props = $props();
+const { events, workday, now, isToday }: Props = $props();
 
 /** モックの目盛りの間隔（1時間あたりの高さ） */
 const HOUR_PX = 44;
@@ -30,18 +29,7 @@ const PX_PER_MINUTE = HOUR_PX / HOUR_MINUTES;
 /** 短い予定でも予定名が読めるよう、ブロックは1行分より低くしない */
 const MIN_BLOCK_PX = 18;
 
-/** 表示のためだけの現在時刻。毎秒読むので、分の変わり目や日付をまたいだときに遅れない */
-let now = $state(untrack(() => readNow()));
-
-$effect(() => {
-  const id = window.setInterval(() => {
-    now = readNow();
-  }, 1000);
-  return () => window.clearInterval(id);
-});
-
 const hours = $derived(workday.hours);
-const isToday = $derived(toDayKey(now) === dayKey);
 const minute = $derived(minuteOfDay(now));
 const nowTop = $derived(isToday ? nowOffset(minute, hours) : undefined);
 const summary = $derived(focus(events, workday, minute));

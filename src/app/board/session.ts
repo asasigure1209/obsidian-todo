@@ -19,7 +19,7 @@ export type BoardState =
   | { kind: "loading" }
   | { kind: "missing" }
   | { kind: "unreadable" }
-  | ({ kind: "board"; canAdd: boolean } & BoardView);
+  | ({ kind: "board" } & BoardView);
 
 /** 1日のボードの窓口。表示する状態と、ボードからの操作をまとめて持つ。操作は、書き込めたら true で終わる */
 export interface BoardSession extends Readable<BoardState> {
@@ -176,13 +176,9 @@ class Session implements BoardSession {
     this.states.emit(this.doc ? this.boardState(this.doc) : MISSING);
   }
 
-  /**
-   * タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい。
-   * canAdd も組み立てるたびに求める。開いたまま日付をまたいだら、次に読み直したときから追加の入口を出さない
-   */
+  /** タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい */
   private boardState(doc: DayDocument): BoardState {
-    const view = toBoardView(doc, this.deps.editor.current(), this.dayKey);
-    return { kind: "board", canAdd: this.can("add"), ...view };
+    return { kind: "board", ...toBoardView(doc, this.deps.editor.current(), this.dayKey) };
   }
 
   private can(kind: EditKind): boolean {

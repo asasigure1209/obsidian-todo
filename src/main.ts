@@ -10,6 +10,8 @@ import { BOARD_ICON, BOARD_VIEW_TYPE, BoardView } from "@/ui/BoardView";
 const OPEN_BOARD_LABEL = "今日のボードを開く";
 /** TODO ファイルのフォルダ。設定で変えられるようにするまでの既定値（design 7.1） */
 const TODO_FOLDER = "TODO";
+/** 作業ログのフォルダ。設定で変えられるようにするまでの既定値（design 7.1） */
+const WORK_LOG_FOLDER = "作業ログ";
 /** 25分の満了を判定する間隔 */
 const TICK_MS = 1000;
 
@@ -38,7 +40,7 @@ export default class DailyKanbanTodoPlugin extends Plugin {
       editor,
       onError: reportError,
     };
-    this.registerView(BOARD_VIEW_TYPE, (leaf) => new BoardView(leaf, deps));
+    this.registerView(BOARD_VIEW_TYPE, (leaf) => new BoardView(leaf, deps, WORK_LOG_FOLDER));
     this.addRibbonIcon(BOARD_ICON, OPEN_BOARD_LABEL, () => this.activateView());
     this.addCommand({
       id: "open-board",
