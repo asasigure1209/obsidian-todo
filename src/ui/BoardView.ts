@@ -1,8 +1,9 @@
 import { type App, ItemView, Modal, type WorkspaceLeaf } from "obsidian";
 import { type Component, mount, unmount } from "svelte";
 import { type BoardDeps, type BoardSession, openBoard } from "@/app/board/session";
+import { WORK_LOG_FAILED_MESSAGE } from "@/app/messages";
 import type { Card } from "@/domain/board";
-import { toDayKey } from "@/domain/day";
+import { boardTitle, canOpen, dayFilePath, toDayKey } from "@/domain/day";
 import { DEFAULT_WORKDAY } from "@/domain/schedule";
 import AddTodoDialog from "./AddTodoDialog.svelte";
 import Board from "./Board.svelte";
@@ -21,6 +22,8 @@ export class BoardView extends ItemView {
   constructor(
     leaf: WorkspaceLeaf,
     private readonly deps: BoardDeps,
+    /** 作業ログのフォルダ（design 7.1） */
+    private readonly workLogFolder: string,
   ) {
     super(leaf);
   }
@@ -29,8 +32,10 @@ export class BoardView extends ItemView {
     return BOARD_VIEW_TYPE;
   }
 
+  /** 今日は「今日のボード」、過去の日は「11月9日のボード」 */
   getDisplayText(): string {
-    return "今日のボード";
+    const today = this.today();
+    return boardTitle(this.dayKey ?? today, today);
   }
 
   override getIcon(): string {
@@ -39,25 +44,37 @@ export class BoardView extends ItemView {
 
   /** 開いた時点の日付で固定する。開いたまま日付が変わっても切り替えない（architecture 6章） */
   override async onOpen(): Promise<void> {
-    this.mountBoard();
+    this.showDay(this.today());
   }
 
   override async onClose(): Promise<void> {
-    await this.unmountBoard();
+    this.unmountBoard();
   }
 
   /** ボードを開き直したとき、表示している日が今日でなければ今日に切り替える */
   async showToday(): Promise<void> {
-    if (this.dayKey !== toDayKey(this.deps.clock.now())) {
-      await this.unmountBoard();
-      this.mountBoard();
-    }
+    this.showDay(this.today());
   }
 
-  private mountBoard(): void {
-    const dayKey = toDayKey(this.deps.clock.now());
+  /**
+   * その日のボードに切り替える。表示している日と同じ日や、未来の日（design 8.3）なら何もしない。
+   * 閉じてから作るまでを同期で行うので、素早く押してもボードを2つ作らない
+   */
+  showDay(dayKey: string): void {
+    if (dayKey === this.dayKey || !canOpen(dayKey, this.today())) {
+      return;
+    }
+    this.unmountBoard();
+    this.mountBoard(dayKey);
+  }
+
+  private today(): string {
+    return toDayKey(this.deps.clock.now());
+  }
+
+  /** 作れたときだけ表示している日を持つ。作れなかったら、次の切り替えで作り直せる */
+  private mountBoard(dayKey: string): void {
     const session = openBoard(this.deps, dayKey);
-    this.dayKey = dayKey;
     this.session = session;
     this.board = mount(Board, {
       target: this.contentEl,
@@ -74,12 +91,33 @@ export class BoardView extends ItemView {
         // 設定画面ができたら、ここを設定の値に替える（design 8.2）
         workday: DEFAULT_WORKDAY,
         now: () => this.deps.clock.now(),
+        // 日付をまたいで「今日」が変わったら、タブの見出し（今日のボード／M月D日のボード）を読み直させる
+        onTodayChange: () => this.refreshTitle(),
         openAdd: () =>
           this.openModal(
             new SvelteModal(this.app, AddTodoDialog, "daily-kanban-todo-add-modal", { session }),
           ),
+        showDay: (next: string) => this.showDay(next),
+        openWorkLog: () => this.openWorkLog(dayKey),
       },
     });
+    this.dayKey = dayKey;
+    this.refreshTitle();
+  }
+
+  /** ファイルがなければ、ほかのリンクと同じく Obsidian が作る。開けなければ知らせる */
+  private openWorkLog(dayKey: string): void {
+    this.app.workspace
+      .openLinkText(dayFilePath(this.workLogFolder, dayKey), "", false)
+      .catch((error: unknown) => {
+        this.deps.onError(error);
+        this.deps.notifier.notify(WORK_LOG_FAILED_MESSAGE);
+      });
+  }
+
+  /** タブの見出しを読み直させる。updateHeader は公開の型にないので、ない版では何もしない */
+  private refreshTitle(): void {
+    (this.leaf as WorkspaceLeaf & { updateHeader?: () => void }).updateHeader?.();
   }
 
   private openModal(modal: Modal): void {
@@ -88,13 +126,15 @@ export class BoardView extends ItemView {
     modal.open();
   }
 
-  private async unmountBoard(): Promise<void> {
+  /** トランジションを使わないので、unmount はその場で終わる（待たなくてよい） */
+  private unmountBoard(): void {
+    this.dayKey = undefined;
     this.modal?.close();
     this.modal = undefined;
     this.session?.close();
     this.session = undefined;
     if (this.board) {
-      await unmount(this.board);
+      void unmount(this.board);
       this.board = undefined;
     }
   }

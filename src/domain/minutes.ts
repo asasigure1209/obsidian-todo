@@ -16,3 +16,8 @@ export function recordableMinutes(startedAt: number, now: number): number {
 export function pomodoroEquivalent(minutes: number): number {
   return Math.round((minutes / POMODORO_MINUTES) * 10) / 10;
 }
+
+/** 分数がポモドーロ何個分か。25分で割って切り捨てる（多めに出さない） */
+export function toPomodoros(minutes: number): number {
+  return Math.floor(minutes / POMODORO_MINUTES);
+}

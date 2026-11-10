@@ -1,8 +1,11 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import type { BoardSession } from "@/app/board/session";
-import type { Card } from "@/domain/board";
+import { type Card, dayProgress } from "@/domain/board";
+import { canEdit, toDayKey } from "@/domain/day";
 import type { Workday } from "@/domain/schedule";
 import Column from "./Column.svelte";
+import Header from "./Header.svelte";
 import type { Drop } from "./sortable";
 import Timeline from "./Timeline.svelte";
 
@@ -18,9 +21,56 @@ interface Props {
   workday: Workday;
   /** 現在時刻の取得元。BoardView が持つ時計 */
   now: () => Date;
+  /** 日付をまたいで今日が変わったとき（タブの見出しを読み直す） */
+  onTodayChange: () => void;
+  /** 表示する日を切り替える（ヘッダーの「前の日」「次の日」） */
+  showDay: (dayKey: string) => void;
+  /** その日の作業ログを開く */
+  openWorkLog: () => void;
 }
 
-const { dayKey, session, openWork, openAdd, workday, now }: Props = $props();
+const {
+  dayKey,
+  session,
+  openWork,
+  openAdd,
+  workday,
+  now: readNow,
+  onTodayChange,
+  showDay,
+  openWorkLog,
+}: Props = $props();
+
+/**
+ * 表示のための現在時刻。ボードの中でここだけが毎秒読み、ヘッダーとタイムラインに渡す。
+ * 開いたまま日付をまたいでも、「次の日」・文言・タイムラインが同じ時点で切り替わる
+ */
+let now = $state(untrack(() => readNow()));
+
+$effect(() => {
+  const id = window.setInterval(() => {
+    now = readNow();
+  }, 1000);
+  return () => window.clearInterval(id);
+});
+
+const today = $derived(toDayKey(now));
+const isToday = $derived(dayKey === today);
+/** 過去の日には追加できない（design 8.3）。書き込むときは session が改めて確かめる */
+const canAdd = $derived(canEdit("add", dayKey, today));
+
+$effect(() => {
+  // today が変わるたびに呼ぶ
+  void today;
+  untrack(onTodayChange);
+});
+
+/** 集中ポモドーロ数。分母は就業時間の全体で数えるので、1日の中で変わらない */
+const progress = $derived(
+  $session.kind === "board" ? dayProgress($session.board, $session.events, workday) : undefined,
+);
+/** 知らせの文言の「今日」「この日」 */
+const dayWord = $derived(isToday ? "今日" : "この日");
 
 const COLUMNS = [
   ["todo", "今日やる"],
@@ -42,17 +92,15 @@ function handleDrop(drop: Drop): void {
 </script>
 
 <div class="board">
-  <header class="board-header">
-    <h2>{dayKey}</h2>
-  </header>
+  <Header {dayKey} {progress} {isToday} {showDay} {openWorkLog} />
 
   <div class="board-body">
     <aside class="sidebar">
       {#if $session.kind === "board"}
-        <Timeline {dayKey} events={$session.events} {workday} {now} />
+        <Timeline events={$session.events} {workday} {now} {isToday} />
       {/if}
       <!-- 過去の日には追加できないので出さない（design 8.3） -->
-      {#if $session.kind === "board" && $session.canAdd}
+      {#if $session.kind === "board" && canAdd}
         <button type="button" class="add-todo" onclick={openAdd}>＋ TODOを追加</button>
       {/if}
     </aside>
@@ -73,9 +121,11 @@ function handleDrop(drop: Drop): void {
           {/each}
         </div>
       {:else if $session.kind === "missing"}
-        <p class="message">今日のファイルがありません</p>
+        <p class="message">{dayWord}のファイルがありません</p>
       {:else if $session.kind === "unreadable"}
-        <p class="message">今日のファイルを読めませんでした。ファイルを保存し直すと読み直します</p>
+        <p class="message">
+          {dayWord}のファイルを読めませんでした。ファイルを保存し直すと読み直します
+        </p>
       {/if}
     </div>
   </div>
@@ -87,15 +137,6 @@ function handleDrop(drop: Drop): void {
   flex-direction: column;
   height: 100%;
   color: var(--text-normal);
-}
-
-.board-header {
-  padding: var(--size-4-4);
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.board-header h2 {
-  margin: 0;
 }
 
 /* 左にサイドバー、右に3列（モック M1） */

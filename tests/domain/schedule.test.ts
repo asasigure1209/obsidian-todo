@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 import { parseDocument } from "@/domain/document/body";
 import {
   DEFAULT_WORKDAY,
+  dayPomodoroCapacity,
   focus,
   focusMinutes,
+  focusProgress,
   formatClock,
   hourMarks,
   minuteOfDay,
@@ -208,5 +210,66 @@ describe("タイムラインの配置", () => {
 describe("minuteOfDay", () => {
   it("その日の0時からの分数", () => {
     expect(minuteOfDay(new Date(2026, 10, 10, 11, 20, 59))).toBe(at(11, 20));
+  });
+});
+
+describe("dayPomodoroCapacity（その日に可能なポモドーロ数）", () => {
+  it("就業時間の全体から予定と休憩を除き、25分で割って切り捨てる", () => {
+    // 540分から休憩 60分と予定 90分を除いた 390分は、15.6ポモドーロ
+    expect(dayPomodoroCapacity([event(at(10), at(11, 30))], workday)).toBe(15);
+    // 予定がなければ 480分で 19.2ポモドーロ
+    expect(dayPomodoroCapacity([], workday)).toBe(19);
+  });
+
+  it("25分ちょうどで割り切れれば、その数", () => {
+    const short: Workday = { hours: { start: at(9), end: at(9, 50) }, breaks: [] };
+    expect(dayPomodoroCapacity([], short)).toBe(2);
+    expect(dayPomodoroCapacity([event(at(9), at(9, 1))], short)).toBe(1);
+  });
+
+  it("予定で埋まった日は 0", () => {
+    expect(dayPomodoroCapacity([event(at(8), at(19))], workday)).toBe(0);
+  });
+
+  it("予定が増えても、可能な数は増えない", () => {
+    const minute = fc.integer({ min: 0, max: 24 * 60 });
+    const anEvent = fc
+      .tuple(minute, minute)
+      .map(([a, b]) => event(Math.min(a, b), Math.max(a, b) + 1));
+    fc.assert(
+      fc.property(fc.array(anEvent), anEvent, (list, extra) => {
+        expect(dayPomodoroCapacity([...list, extra], workday)).toBeLessThanOrEqual(
+          dayPomodoroCapacity(list, workday),
+        );
+      }),
+    );
+  });
+});
+
+describe("focusProgress（進捗バーの割合）", () => {
+  it("完了数 / 可能な数", () => {
+    expect(focusProgress(3, 9)).toBeCloseTo(1 / 3);
+    expect(focusProgress(0, 9)).toBe(0);
+  });
+
+  it("可能な数を超えても 1 で止める", () => {
+    expect(focusProgress(9, 9)).toBe(1);
+    expect(focusProgress(12, 9)).toBe(1);
+  });
+
+  it("可能な数が 0 なら 0", () => {
+    expect(focusProgress(0, 0)).toBe(0);
+    expect(focusProgress(3, 0)).toBe(0);
+  });
+
+  it("どの数でも 0 以上 1 以下", () => {
+    const count = fc.nat({ max: 100 });
+    fc.assert(
+      fc.property(count, count, (done, capacity) => {
+        const ratio = focusProgress(done, capacity);
+        expect(ratio).toBeGreaterThanOrEqual(0);
+        expect(ratio).toBeLessThanOrEqual(1);
+      }),
+    );
   });
 });

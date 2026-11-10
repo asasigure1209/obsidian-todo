@@ -53,6 +53,9 @@
   - `app/board/session.ts` の `openBoard` が返す窓口（`BoardSession`）が、変更イベントのたびに読み直して状態（読み込み中・ファイルなし・読めない・ボード）を流す。読み込みは非同期で追い越されることがあるため、最後に始めた読み込みの結果だけを流す（`app/board/reader.ts`）。書き込み中と閉じた後に終わった読み込みは session が捨てる。読めなかったときは前の状態のまま次の変更を待ち、まだ何も読めていなければ「読めない」を流す。受け取る側の例外と、本文の解釈で起きた例外は呼び出し元に渡し（「読めない」にはしない）、次の変更も受け取れるようにする
   - 変更の直後に読むので、キャッシュ（`cachedRead`）ではなく `vault.read` で読む
   - ボードは開いた日で固定するが、「今日のボードを開く」で開き直したときは今日に切り替える
+  - ヘッダーの「前の日」「次の日」は `BoardView.showDay` で日を切り替える。今の session とボードを閉じて（開いているダイアログも閉じる）、その日の `openBoard` で作り直す。閉じてから作るまでを同期で行う（トランジションを使わないので、Svelte の unmount はその場で終わる）ので、素早く押してもボードを2つ作らない。表示のための現在時刻は Board が毎秒読み、ヘッダー・タイムライン・「＋ TODOを追加」が同じ「今日」で切り替わる（追加は書き込むときに session も確かめる）。未来の日は開かない（`domain/day.ts` の `canOpen`）
+  - タブの見出しは `getDisplayText` が表示している日から作る。切り替えたら見出しを読み直させる（公開の型にない `leaf.updateHeader` を、あれば呼ぶ）
+  - ヘッダーの集中ポモドーロ数は、表示用のモデル（`dayPomodoros`）と予定（`dayPomodoroCapacity`）から UI が組み立てる。作業ログは `workspace.openLinkText` で開き、中身は読まない
   - `BoardSession` は Svelte のストアの約束（`subscribe` がすぐに今の値を渡し、購読をやめる関数を返す）と同じ形で返す。`app/` は `svelte` を import せずに済み、`.svelte` 側は `$` を付けて読むだけになる
   - ファイルの取得元は `domain/day-files.ts` の `DayFiles` 型で表し、実体は `adapters/vault.ts`。テストでは手書きの偽物（`tests/app/fakes/`）を使う
 
@@ -178,7 +181,7 @@
 
 ```
 src/
-  main.ts                 プラグインの入口。ビュー・コマンド・設定画面の登録
+  main.ts                 プラグインの入口。ビュー・コマンド・設定画面の登録。TODO と作業ログのフォルダの既定値
   domain/                 Obsidian に依存しない
     document/             1日のファイルの書式（AD-4）
       body.ts             本文の読み書き。frontmatter・TODO ブロック・固定行への区切り
@@ -192,16 +195,16 @@ src/
     timer.ts              タイマーの状態遷移と経過分の計算（AD-6）
     timer-store.ts        タイマーの状態の保存先の型（実体は adapters/timer-store.ts）
     carryover.ts          前日の未完了の複製（design 7.8）
-    schedule.ts           予定の行の読み取り、就業時間・休憩から集中できる時間、タイムラインの配置（design 7.3・8.2）
+    schedule.ts           予定の行の読み取り、就業時間・休憩から集中できる時間とその日に可能なポモドーロ数、タイムラインの配置（design 7.3・8.2）
     clock.ts              現在時刻の取得元の型（実体は adapters/clock.ts）
     notifier.ts           利用者への知らせの型（実体は adapters/notifier.ts）
-    day.ts                日付のキーと、その日にできる操作（design 8.3）
-    board.ts              本文とタイマーから3列の表示用モデルと、計測中のカードを作る（AD-2）
+    day.ts                日付のキー、前日・翌日、開ける日とその日にできる操作（design 8.3）、ヘッダーの日付とタブの見出し、作業ログのパス
+    board.ts              本文とタイマーから3列の表示用モデルと、計測中のカード、その日の集中ポモドーロ数を作る（AD-2）
     work-draft.ts         M2 の下書き（保存するまでの行の追加・変更・削除と、保存する変更）
     day-files.ts          その日のファイルの取得元の型（実体は adapters/vault.ts）
   app/
     board/
-      session.ts          1日のボードの窓口。ファイルの変更を受けて読み直す（AD-2）。操作を先読みしてから、day-editor に渡す（AD-3）。表示する状態には、その時点で追加できる日か（canAdd）も含める
+      session.ts          1日のボードの窓口。ファイルの変更を受けて読み直す（AD-2）。操作を先読みしてから、day-editor に渡す（AD-3）
       reader.ts           ファイルを読み直す。追い越されたら最後に始めた読み込みの結果だけを渡す（AD-2）
       writer.ts           書き込みを day-editor の並びに乗せる。断られたら、それより前に受けた操作を捨てる
     day-editor.ts         書き込みを1本に並べ、タイマーを保存してから vault.process で書き戻す。毎秒の満了の判定（AD-6）
@@ -213,8 +216,8 @@ src/
     notifier.ts           通知と音（音声ファイルを同梱せず、ブラウザの音声機能で短い音を鳴らす）
     clock.ts              現在時刻
   ui/
-    BoardView.ts          独自ビュー。M2〜M4 の Obsidian のダイアログ（Modal）もここに置き、ボードを閉じるときに一緒に閉じる
-    *.svelte              ボード（左サイドバーのタイムラインと3列）、カード、M2〜M4 ダイアログの中身（WorkDialog・AddTodoDialog など）
+    BoardView.ts          独自ビュー。日の切り替え（showDay）と作業ログを開く処理。M2〜M4 の Obsidian のダイアログ（Modal）もここに置き、ボードを閉じるときや日を切り替えるときに一緒に閉じる
+    *.svelte              ボード（ヘッダー、左サイドバーのタイムラインと3列）、カード、M2〜M4 ダイアログの中身（Header・WorkDialog・AddTodoDialog など）
 tests/
   domain/                 ドメイン層の単体テスト。読み書きの往復テストを含む
   app/                    手書きの偽物（fakes/）を使うテスト

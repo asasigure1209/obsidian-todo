@@ -572,38 +572,6 @@ describe("openBoard：TODOの追加（M4）", () => {
     expect(notices).toEqual(["入力が書式に合わないため、追加・変更しませんでした"]);
   });
 
-  /** 最後に受け取ったボードで追加できるか */
-  const canAddOf = (received: BoardState[]) => {
-    const last = received.at(-1);
-    return last?.kind === "board" ? last.canAdd : undefined;
-  };
-
-  it.each([
-    [today, true],
-    [yesterday, false],
-  ])("%s のボードで追加できるか：%s", async (dayKey, expected) => {
-    const files = new FakeDayFiles();
-    files.write(dayKey, body);
-    const { received } = await openWithStates(files, dayKey);
-
-    expect(canAddOf(received)).toBe(expected);
-  });
-
-  it("開いたまま日付をまたぐと、次に読み直したときから追加できない", async () => {
-    const files = new FakeDayFiles();
-    files.write(today, body);
-    const received: BoardState[] = [];
-    const { session, clock } = open(files);
-    session.subscribe((state) => received.push(state));
-    await settle();
-
-    clock.advance(15 * 60);
-    files.write(today, body);
-    await settle();
-
-    expect(canAddOf(received)).toBe(false);
-  });
-
   it("閉じた後は追加せず、false を返す", async () => {
     const files = new FakeDayFiles();
     files.write(today, body);

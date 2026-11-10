@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { pomodoroEquivalent, recordableMinutes } from "@/domain/minutes";
+import { pomodoroEquivalent, recordableMinutes, toPomodoros } from "@/domain/minutes";
 
 const start = Date.UTC(2026, 10, 4, 0, 0, 0);
 const at = (minutes: number, seconds = 0): number => start + minutes * 60_000 + seconds * 1000;
@@ -43,5 +43,17 @@ describe("pomodoroEquivalent", () => {
     [0, 0],
   ])("%d分は %dポモドーロ（小数1桁に四捨五入）", (minutes, pomodoros) => {
     expect(pomodoroEquivalent(minutes)).toBe(pomodoros);
+  });
+});
+
+describe("toPomodoros", () => {
+  it.each([
+    [0, 0],
+    [24, 0],
+    [25, 1],
+    [74, 2],
+    [75, 3],
+  ])("%d分は %dポモドーロ（25分で割って切り捨て）", (minutes, pomodoros) => {
+    expect(toPomodoros(minutes)).toBe(pomodoros);
   });
 });

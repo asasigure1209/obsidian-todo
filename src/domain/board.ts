@@ -2,7 +2,14 @@ import type { LineRef } from "@/domain/commands/command";
 import { type DayDocument, type TodoBlock, todoBlocks } from "@/domain/document/body";
 import type { Estimate, Status } from "@/domain/document/todo-line";
 import { type WorkKind, workLines } from "@/domain/document/work-entry";
-import { type ScheduledEvent, scheduledEvents } from "@/domain/schedule";
+import {
+  dayPomodoroCapacity,
+  focusProgress,
+  type ScheduledEvent,
+  scheduledEvents,
+  type TimeRange,
+  type Workday,
+} from "@/domain/schedule";
 import { type RunningTarget, runningTarget, type Timer } from "@/domain/timer";
 
 /** 作業時間の1件。ref はそのまま作業時間のコマンドに渡せる（カードの中で n 番目の作業時間の行） */
@@ -89,6 +96,28 @@ export function runningCard(
   return card && running
     ? { key: card.key, startedAt: running.timer.startedAt, count: card.pomodoros + 1 }
     : undefined;
+}
+
+/** その日の集中ポモドーロ数（ヘッダーの完了数）。すべての列のカードの `ポモドーロ` の行の数で、中断と手動は数えない */
+export function dayPomodoros(board: Board): number {
+  return [...board.todo, ...board.doing, ...board.done].reduce(
+    (sum, card) => sum + card.pomodoros,
+    0,
+  );
+}
+
+/** ヘッダーの集中ポモドーロ数（design 5章 M1）。done は完了数、capacity は可能な数、ratio は進捗バーの割合 */
+export interface DayProgress {
+  done: number;
+  capacity: number;
+  ratio: number;
+}
+
+/** 可能な数は就業時間の全体で数えるので、1日の中で変わらない */
+export function dayProgress(board: Board, events: TimeRange[], workday: Workday): DayProgress {
+  const done = dayPomodoros(board);
+  const capacity = dayPomodoroCapacity(events, workday);
+  return { done, capacity, ratio: focusProgress(done, capacity) };
 }
 
 /** 計測中のカードは、この日のタイマーの対象が見つかったときだけ示す */

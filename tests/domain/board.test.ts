@@ -1,6 +1,13 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Board, runningCard, toBoard, toBoardView } from "@/domain/board";
+import {
+  type Board,
+  dayPomodoros,
+  dayProgress,
+  runningCard,
+  toBoard,
+  toBoardView,
+} from "@/domain/board";
 import { moveCard } from "@/domain/commands/card";
 import { isRejection, type LineRef } from "@/domain/commands/command";
 import { editWork } from "@/domain/commands/work";
@@ -226,5 +233,75 @@ describe("toBoardView", () => {
   it("ほかの日のタイマーなら、計測中のカードを示さない", () => {
     const view = toBoardView(parseDocument(body), timer, "2026-11-06");
     expect(view).not.toHaveProperty("running");
+  });
+});
+
+describe("dayPomodoros（その日の集中ポモドーロ数）", () => {
+  it("すべての列のカードの、種類がポモドーロの作業時間の行の数。中断と手動は数えない", () => {
+    const body = `- [ ] 見積もりの返信を書く
+    - 25分 ポモドーロ
+- [/] 提案資料の構成を固める
+    - 25分 ポモドーロ
+    - 10分 中断 電話
+    - 25分 ポモドーロ
+- [x] 経費精算を提出
+    - 25分 ポモドーロ
+    - 15分 手動
+    参考: 25分 ポモドーロ
+`;
+    expect(dayPomodoros(boardOf(body))).toBe(4);
+  });
+
+  it("カードがなければ 0", () => {
+    expect(dayPomodoros(boardOf("朝のメモ\n"))).toBe(0);
+  });
+});
+
+describe("dayProgress（ヘッダーの集中ポモドーロ数と進捗バー）", () => {
+  const workday = { hours: { start: 540, end: 1080 }, breaks: [{ start: 720, end: 780 }] };
+  const body = "- [x] a\n    - 25分 ポモドーロ\n    - 25分 ポモドーロ\n    - 25分 ポモドーロ\n";
+
+  it("完了数はその日のポモドーロの行の数、可能な数は就業時間の全体から、割合はその比", () => {
+    // 就業時間 480分（休憩を除く）から予定 105分を除いた 375分は 15ポモドーロ
+    const events = [{ start: 600, end: 705, title: "定例" }];
+
+    expect(dayProgress(boardOf(body), events, workday)).toEqual({
+      done: 3,
+      capacity: 15,
+      ratio: 3 / 15,
+    });
+  });
+
+  it("可能な数を超えた割合は 1 で止め、可能な数が 0 なら 0", () => {
+    const full = [{ start: 0, end: 1439, title: "終日の作業" }];
+
+    expect(dayProgress(boardOf(body), [], { hours: { start: 540, end: 590 }, breaks: [] })).toEqual(
+      {
+        done: 3,
+        capacity: 2,
+        ratio: 1,
+      },
+    );
+    expect(dayProgress(boardOf(body), full, workday).ratio).toBe(0);
+  });
+
+  it("カードを並べ替え・移しても、完了数は変わらない", () => {
+    fc.assert(
+      fc.property(
+        markdownLike,
+        fc.nat(9),
+        fc.constantFrom("todo" as const, "doing" as const, "done" as const),
+        fc.nat(5),
+        (body, index, status, position) => {
+          const doc = parseDocument(body);
+          const block = todoBlocks(doc.segments)[index];
+          fc.pre(block !== undefined);
+          const moved = moveCard(doc, { index, text: block?.head.text ?? "" }, status, position);
+          fc.pre(!isRejection(moved));
+
+          expect(dayPomodoros(toBoard(moved as typeof doc))).toBe(dayPomodoros(toBoard(doc)));
+        },
+      ),
+    );
   });
 });
