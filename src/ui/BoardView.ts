@@ -2,9 +2,10 @@ import { type App, ItemView, Modal, type WorkspaceLeaf } from "obsidian";
 import { type Component, mount, unmount } from "svelte";
 import { type BoardDeps, type BoardSession, openBoard } from "@/app/board/session";
 import { WORK_LOG_FAILED_MESSAGE } from "@/app/messages";
+import type { AppSettings } from "@/app/settings";
 import type { Card } from "@/domain/board";
 import { boardTitle, canOpen, dayFilePath, toDayKey } from "@/domain/day";
-import { DEFAULT_WORKDAY } from "@/domain/schedule";
+import type { Settings } from "@/domain/settings";
 import AddTodoDialog from "./AddTodoDialog.svelte";
 import Board from "./Board.svelte";
 import WorkDialog from "./WorkDialog.svelte";
@@ -16,14 +17,19 @@ export class BoardView extends ItemView {
   private board: ReturnType<typeof mount> | undefined;
   private session: BoardSession | undefined;
   private dayKey: string | undefined;
+  /** 最後に開こうとした日。作れなかったときも、設定を直したらこの日で作り直す */
+  private wantedDay: string | undefined;
   /** 開いている M2・M4 のダイアログ。ボードを閉じたり作り直したりするときに一緒に閉じる（閉じた session に書き込ませない） */
   private modal: Modal | undefined;
+  /** 今のボードを作ったときの、ボードに効く設定（boardSettingsKey） */
+  private mountedWith: string | undefined;
+  private stopSettings: () => void = () => {};
 
   constructor(
     leaf: WorkspaceLeaf,
     private readonly deps: BoardDeps,
-    /** 作業ログのフォルダ（design 7.1） */
-    private readonly workLogFolder: string,
+    /** フォルダ（design 7.1）と就業時間・休憩（design 8.2） */
+    private readonly settings: AppSettings,
   ) {
     super(leaf);
   }
@@ -45,9 +51,11 @@ export class BoardView extends ItemView {
   /** 開いた時点の日付で固定する。開いたまま日付が変わっても切り替えない（architecture 6章） */
   override async onOpen(): Promise<void> {
     this.showDay(this.today());
+    this.stopSettings = this.settings.subscribe((settings) => this.applySettings(settings));
   }
 
   override async onClose(): Promise<void> {
+    this.stopSettings();
     this.unmountBoard();
   }
 
@@ -64,6 +72,7 @@ export class BoardView extends ItemView {
     if (dayKey === this.dayKey || !canOpen(dayKey, this.today())) {
       return;
     }
+    this.wantedDay = dayKey;
     this.unmountBoard();
     this.mountBoard(dayKey);
   }
@@ -72,10 +81,26 @@ export class BoardView extends ItemView {
     return toDayKey(this.deps.clock.now());
   }
 
+  /**
+   * TODO のフォルダか就業時間・休憩が変わったら、同じ日のボードを作り直す（設定はすぐに効かせる）。
+   * 作り直すと、新しいフォルダのファイルを読み直し、タイムラインとヘッダーの可能な数も新しい就業時間で描く。
+   * 作業ログのフォルダは開くときに読むので、作り直さない
+   */
+  private applySettings(settings: Settings): void {
+    const dayKey = this.wantedDay;
+    if (dayKey === undefined || boardSettingsKey(settings) === this.mountedWith) {
+      return;
+    }
+    this.unmountBoard();
+    this.mountBoard(dayKey);
+  }
+
   /** 作れたときだけ表示している日を持つ。作れなかったら、次の切り替えで作り直せる */
   private mountBoard(dayKey: string): void {
+    const settings = this.settings.current();
     const session = openBoard(this.deps, dayKey);
     this.session = session;
+    this.mountedWith = boardSettingsKey(settings);
     this.board = mount(Board, {
       target: this.contentEl,
       props: {
@@ -88,8 +113,7 @@ export class BoardView extends ItemView {
               card,
             }),
           ),
-        // 設定画面ができたら、ここを設定の値に替える（design 8.2）
-        workday: DEFAULT_WORKDAY,
+        workday: settings.workday,
         now: () => this.deps.clock.now(),
         // 日付をまたいで「今日」が変わったら、タブの見出し（今日のボード／M月D日のボード）を読み直させる
         onTodayChange: () => this.refreshTitle(),
@@ -108,7 +132,7 @@ export class BoardView extends ItemView {
   /** ファイルがなければ、ほかのリンクと同じく Obsidian が作る。開けなければ知らせる */
   private openWorkLog(dayKey: string): void {
     this.app.workspace
-      .openLinkText(dayFilePath(this.workLogFolder, dayKey), "", false)
+      .openLinkText(dayFilePath(this.settings.current().folders.workLog, dayKey), "", false)
       .catch((error: unknown) => {
         this.deps.onError(error);
         this.deps.notifier.notify(WORK_LOG_FAILED_MESSAGE);
@@ -138,6 +162,11 @@ export class BoardView extends ItemView {
       this.board = undefined;
     }
   }
+}
+
+/** ボードの表示に効く設定。TODO のフォルダ（読むファイル）と就業時間・休憩 */
+function boardSettingsKey(settings: Settings): string {
+  return JSON.stringify([settings.folders.todo, settings.workday]);
 }
 
 /**

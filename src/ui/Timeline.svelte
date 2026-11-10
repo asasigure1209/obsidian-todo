@@ -13,7 +13,7 @@ import {
 
 interface Props {
   events: ScheduledEvent[];
-  /** 就業時間と休憩（design 8.2）。設定画面ができるまでは既定値 */
+  /** 就業時間と休憩（design 8.2）。設定の値で、変えるとボードごと作り直す（BoardView） */
   workday: Workday;
   /** 表示のための現在時刻。Board が毎秒読んで渡す */
   now: Date;

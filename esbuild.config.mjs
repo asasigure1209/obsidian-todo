@@ -1,3 +1,4 @@
+import { watch } from "node:fs";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import esbuild from "esbuild";
@@ -8,6 +9,8 @@ const outdir = "build";
 
 await mkdir(outdir, { recursive: true });
 await copyFile("manifest.json", `${outdir}/manifest.json`);
+// Obsidian はプラグインのフォルダの styles.css を読み込む（設定画面の問題の表示に使う）
+await copyFile("styles.css", `${outdir}/styles.css`);
 if (!production) {
   // Hot Reload プラグインは、このファイルがあるプラグインを監視して再読み込みする
   await writeFile(`${outdir}/.hotreload`, "");
@@ -40,4 +43,8 @@ if (production) {
   await context.dispose();
 } else {
   await context.watch();
+  // styles.css は esbuild の入力ではないので、変わるたびに自分で写す
+  watch("styles.css", () => {
+    copyFile("styles.css", `${outdir}/styles.css`).catch((error) => console.error(error));
+  });
 }

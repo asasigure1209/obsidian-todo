@@ -19,7 +19,7 @@ export interface Workday {
   breaks: TimeRange[];
 }
 
-/** 設定画面ができるまでの既定値。9:00〜18:00、休憩 12:00〜13:00 */
+/** 設定の既定値。9:00〜18:00、休憩 12:00〜13:00（design 8.2） */
 export const DEFAULT_WORKDAY: Workday = {
   hours: { start: 9 * HOUR_MINUTES, end: 18 * HOUR_MINUTES },
   breaks: [{ start: 12 * HOUR_MINUTES, end: 13 * HOUR_MINUTES }],
@@ -129,6 +129,22 @@ export function nowOffset(now: number, hours: TimeRange): number | undefined {
 /** 0時からの分数を「時:分」に（9:05） */
 export function formatClock(minutes: number): string {
   return `${Math.floor(minutes / HOUR)}:${String(minutes % HOUR).padStart(2, "0")}`;
+}
+
+const CLOCK = /^(\d{1,2}):(\d{2})$/;
+
+/**
+ * 設定の時刻の入力（「9:00」「09:00」）を0時からの分数に。読めなければ undefined。
+ * 日本語入力のまま打った全角の数字とコロン（「９：００」）も読む
+ */
+export function parseClock(text: string): number | undefined {
+  const match = CLOCK.exec(text.normalize("NFKC").trim());
+  if (!match) {
+    return undefined;
+  }
+  const [, hour = "", minute = ""] = match;
+  const minutes = toMinutes(hour, minute);
+  return Number.isNaN(minutes) ? undefined : minutes;
 }
 
 /** 0時からの分数 */

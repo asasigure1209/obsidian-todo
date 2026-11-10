@@ -1,0 +1,5 @@
+/* 設定画面の入力の問題（ui/SettingsTab.ts）。欄の説明の下に出す */
+.daily-kanban-todo-setting-problem {
+  color: var(--text-error);
+  margin-top: var(--size-4-1);
+}

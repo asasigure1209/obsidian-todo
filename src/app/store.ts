@@ -12,6 +12,11 @@ export class Store<T> implements Readable<T> {
     private readonly onError: (error: unknown) => void,
   ) {}
 
+  /** 今の値 */
+  current(): T {
+    return this.value;
+  }
+
   subscribe(run: (value: T) => void): () => void {
     this.runs.add(run);
     run(this.value);

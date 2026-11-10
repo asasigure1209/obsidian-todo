@@ -123,7 +123,7 @@
   - ボードは計測中のカードを、表示を組み立てるたびに `DayEditor` の今のタイマーから求める。タイマーが変わる操作の後は必ず読み直すので、タイマーの変化を購読しなくてよい
   - タイマーを動かさない本文だけの変更（M2 の保存、M4 の追加）も、`stepTimer` のきっかけ `edit`（本文へのコマンドを持つ）として同じ並びに乗せる。タイマーは変えず、対象の判定もしない
   - M2 の保存は `domain/commands/work.ts` の `editWork` で1回の変更にまとめる。どの位置も変える前の子の行で探すので、当てる順番に左右されない。開いた後にタイマーが足した記録は末尾に増えるだけなので、開いたときの位置のまま当たる
-  - 保存先はプラグインの保存領域（`data.json` の `timer`）。読んだ値の形が合わなければ停止中として扱う（`parseTimer`）
+  - 保存先はプラグインの保存領域（`data.json` の `timer`）。設定と1つのファイルを分け合う（AD-11）。読んだ値の形が合わなければ停止中として扱う（`parseTimer`）
 
 ### AD-7 UI は Svelte で作り、独自のビューとして開く
 
@@ -166,14 +166,40 @@
   - Biome の Svelte 対応は試験段階。誤検出が出たら `.svelte` ファイルだけ該当ルールを外す
   - 「型だけ import してよい」（`adapters/` → `domain/`）は Biome では区別できないため、レビューで守る。`ui/` → `domain/` は、型に加えて副作用のない関数（表示の組み立て、M2 の下書き、入力の確かめ）も使ってよい。決まりを domain の1か所に置き、表示と書き込みで食い違わないようにするため
   - Markdown は Biome の対象外（日本語の表が崩れるため）
+  - `ui/` で `obsidian` を使えるのは、Obsidian との境目になる2つのファイルだけ。独自ビュー（`BoardView.ts`）と設定画面（`SettingsTab.ts`）。設定画面は `PluginSettingTab` と `Setting` で Obsidian の標準の見た目にするため、`obsidian` が要る。画面なので `ui/` に置き、`adapters/` には置かない（`adapters/` は `app/` を import できず、設定の窓口 `AppSettings` を使えない）。Biome の override は options を置き換えるので、この override にも共通の `../` 禁止を書く（`tests/config/biome-boundaries.test.ts` が、この2つだけに許していることも確かめる）
 
 | 層 | import してよいもの | `obsidian` | `svelte` |
 |---|---|---|---|
 | `domain/` | なし | 禁止 | 禁止 |
 | `app/` | `domain/`, `adapters/` | 禁止 | 禁止 |
 | `adapters/` | `domain/` | 許可 | 許可 |
-| `ui/` | `app/`, `domain/` | `BoardView.ts` だけ許可（`.svelte` では禁止） | 許可 |
+| `ui/` | `app/`, `domain/` | `BoardView.ts` と `SettingsTab.ts` だけ許可（`.svelte` では禁止） | 許可 |
 | `main.ts` | すべて | 許可 | 許可 |
+
+### AD-11 設定は data.json をタイマーと分け合い、使う時点で今の設定から読む
+
+- **決定：**
+  - 設定（フォルダ・就業時間と休憩・満了の音。design 5章「設定画面」）は、プラグインの保存領域（`data.json`）の `settings` に置く。タイマーの `timer`（AD-6）と同じファイル
+  - `data.json` の読み書きは `adapters/plugin-data.ts` の `PluginData` 1か所にまとめる。書き込みは「読む → 1つの項目だけ差し替える → 書く」を1本に並べる。タイマーの保存（`PluginTimerStore`）と設定の保存（`PluginSettingsStore`）は、どちらもこれを通す
+  - 設定の型、既定値（`DEFAULT_SETTINGS`）、読んだ値の検査（`parseSettings`）、入力の確かめ（`readFolder`・`readWorkday`）は `domain/settings.ts` に置く。時刻の入力は `domain/schedule.ts` の `parseClock` で読む（予定の行と同じ、ありえない時刻を読まない決まり）
+  - 設定の窓口は `app/settings.ts` の `AppSettings` で、プラグインに1つ。Svelte のストアと同じ形（`subscribe`）で今の設定を流し、`current()` で今の設定を返す。`update` は変えた設定をすぐに流してから保存する（変わらなければ流しも保存もしない）。TODO のフォルダが変わったら、`main.ts` が `DayEditor.relocated()` を呼び、保留中のタイマーを新しい置き場所で判定し直す（ファイルの変更は届かないため）
+  - 使う側は、使う時点で今の設定を読む
+    - `VaultDayFiles`（`adapters/vault.ts`）は TODO のフォルダを関数で受け取り、読み書きと変更イベントのたびにパスを求める
+    - 満了の音（`adapters/notifier.ts` の `expiryAlarm`）は、鳴らすときに音の有無を読む
+    - 作業ログのリンク（`BoardView`）は、開くときにフォルダを読む
+  - `BoardView` は設定を購読し、TODO のフォルダか就業時間・休憩が変わったら、同じ日のボードを作り直す（日の切り替えと同じ `unmountBoard` → `mountBoard`）
+  - 設定画面（`ui/SettingsTab.ts`）は入力のたびに確かめ、正しいときだけ `update` に渡す。就業時間と休憩は組み合わせで確かめるので、入力の途中の値（`WorkdayDraft`）を設定画面が持つ
+- **理由：**
+  - タイマーと設定を別々に「読んで書く」と、両方が同じ古い中身を読み、後から書いたほうが先の項目を消す。並べる場所を1つにすれば、どちらの保存も相手の項目を消さない
+  - `adapters/` は `domain/` の値を import しない（AD-10）。そのため `PluginSettingsStore` は読んだままの値を返し、形の検査は `app/` が `parseSettings` で行う（`parseTimer` と同じく項目ごとに既定値へ倒すが、決まりを domain の1か所に置いてテストする）
+  - 使う時点で読めば、設定を変えた後に購読を張り直さなくてよい。`VaultDayFiles` はボードと `DayEditor`（計測中の日のファイルを見張る。AD-6）が分け合うので、張り直さずに新しいフォルダの変更を知らせられるほうが壊れにくい
+  - ボードを作り直せば、新しいフォルダのファイルを読み直し、タイムラインとヘッダーも新しい就業時間で描ける。表示の中に設定の変化を伝える仕組みを足さずに済む
+- **影響：**
+  - 設定を変えると、開いている M2・M4 のダイアログはボードと一緒に閉じる（日の切り替えと同じ）
+  - 保存できなかったときは知らせ、変えた設定はそのまま使う（開き直すと前の設定に戻る）
+  - 保存領域が読めないときは既定値で開く。設定が読めないだけで、ボードとタイマーを止めない
+  - 計測中に TODO のフォルダを変えると、タイマーは新しいフォルダの同じ日付のファイルで対象を探す。見つからなければ保留にする（AD-6）。フォルダの変更では変更イベントが来ないので、保留の読み直しは次の変更か操作のとき
+  - 設定画面は入力のたびに保存する（`data.json` に書く回数は増えるが、書き込みは並べてあるので順番どおりに残る）
 
 ---
 
@@ -181,7 +207,7 @@
 
 ```
 src/
-  main.ts                 プラグインの入口。ビュー・コマンド・設定画面の登録。TODO と作業ログのフォルダの既定値
+  main.ts                 プラグインの入口。設定を開き、ビュー・コマンド・設定画面を登録する
   domain/                 Obsidian に依存しない
     document/             1日のファイルの書式（AD-4）
       body.ts             本文の読み書き。frontmatter・TODO ブロック・固定行への区切り
@@ -194,8 +220,10 @@ src/
       work.ts             作業時間の追加・修正
     timer.ts              タイマーの状態遷移と経過分の計算（AD-6）
     timer-store.ts        タイマーの状態の保存先の型（実体は adapters/timer-store.ts）
+    settings.ts           設定の型と既定値、保存領域から読んだ値の検査（parseSettings）、設定画面の入力の確かめ（AD-11）
+    settings-store.ts     設定の保存先の型（実体は adapters/settings-store.ts）
     carryover.ts          前日の未完了の複製（design 7.8）
-    schedule.ts           予定の行の読み取り、就業時間・休憩から集中できる時間とその日に可能なポモドーロ数、タイムラインの配置（design 7.3・8.2）
+    schedule.ts           予定の行と設定の時刻（parseClock）の読み取り、就業時間・休憩から集中できる時間とその日に可能なポモドーロ数、タイムラインの配置（design 7.3・8.2）
     clock.ts              現在時刻の取得元の型（実体は adapters/clock.ts）
     notifier.ts           利用者への知らせの型（実体は adapters/notifier.ts）
     day.ts                日付のキー、前日・翌日、開ける日とその日にできる操作（design 8.3）、ヘッダーの日付とタブの見出し、作業ログのパス
@@ -209,19 +237,25 @@ src/
       writer.ts           書き込みを day-editor の並びに乗せる。断られたら、それより前に受けた操作を捨てる
     day-editor.ts         書き込みを1本に並べ、タイマーを保存してから vault.process で書き戻す。毎秒の満了の判定（AD-6）
     store.ts              状態を受け取り手へ流す部品（Svelte のストアと同じ形）
+    settings.ts           設定の窓口（AppSettings）。変えた設定をすぐに流して保存する（AD-11）
     messages.ts           利用者への知らせの文言
   adapters/
-    vault.ts              ファイルの取得・変更イベントの購読
-    timer-store.ts        タイマー状態の保存（プラグインの保存領域）。読んだ値の形の検査（parseTimer）
-    notifier.ts           通知と音（音声ファイルを同梱せず、ブラウザの音声機能で短い音を鳴らす）
+    vault.ts              ファイルの取得・変更イベントの購読。フォルダは使うたびに今の設定から求める
+    plugin-data.ts        プラグインの保存領域（data.json）。項目ごとの読み書きを1本に並べる（AD-11）
+    timer-store.ts        タイマー状態の保存（data.json の timer）。読んだ値の形の検査（parseTimer）
+    settings-store.ts     設定の保存（data.json の settings）。形の検査は app/ が domain の parseSettings で行う
+    notifier.ts           通知と音（音声ファイルを同梱せず、ブラウザの音声機能で短い音を鳴らす。音は設定でオフにできる）
     clock.ts              現在時刻
   ui/
-    BoardView.ts          独自ビュー。日の切り替え（showDay）と作業ログを開く処理。M2〜M4 の Obsidian のダイアログ（Modal）もここに置き、ボードを閉じるときや日を切り替えるときに一緒に閉じる
+    BoardView.ts          独自ビュー。日の切り替え（showDay）と作業ログを開く処理。設定が変わったときのボードの作り直し。M2〜M4 の Obsidian のダイアログ（Modal）もここに置き、ボードを閉じるときや日を切り替えるときに一緒に閉じる
+    SettingsTab.ts        設定画面（PluginSettingTab）。入力を確かめ、欄の下に問題を出す
     *.svelte              ボード（ヘッダー、左サイドバーのタイムラインと3列）、カード、M2〜M4 ダイアログの中身（Header・WorkDialog・AddTodoDialog など）
 tests/
   domain/                 ドメイン層の単体テスト。読み書きの往復テストを含む
   app/                    手書きの偽物（fakes/）を使うテスト
-  adapters/               手書きの偽物を使うテスト（Obsidian の API に触れない部分）
+  adapters/               手書きの偽物を使うテスト（Obsidian の API に触れない部分。data.json の読み書きの並び）
+  config/                 設定ファイル（biome.json の層の境界）を検査するテスト
+styles.css                設定画面の問題の表示（ビルドで build/ へ写す）
 ```
 
 ---
