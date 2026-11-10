@@ -1,7 +1,7 @@
-import { markdownLike } from "@tests/domain/document/arbitraries";
+import { estimate, markdownLike } from "@tests/domain/document/arbitraries";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { addTodo, completeCard, moveCard } from "@/domain/commands/card";
+import { addTodo, canAddTodo, completeCard, moveCard } from "@/domain/commands/card";
 import { applyToBody, isRejection, type LineRef } from "@/domain/commands/command";
 import { type DayDocument, parseDocument, todoBlocks } from "@/domain/document/body";
 import type { Status } from "@/domain/document/todo-line";
@@ -16,6 +16,24 @@ import {
   run,
   withCard,
 } from "./fixtures";
+
+describe("canAddTodo（M4 の「追加」を押せるか）", () => {
+  it.each(["メールの返信", "  前後に空白  "])("名前「%s」なら押せる", (name) => {
+    expect(canAddTodo(name)).toBe(true);
+  });
+
+  it.each(["", "   ", " \n\t ", "見積もりつき [est:: 1]"])("名前「%s」では押せない", (name) => {
+    expect(canAddTodo(name)).toBe(false);
+  });
+
+  it("どんな名前と見積もりでも、押せるのは追加できるときだけ", () => {
+    fc.assert(
+      fc.property(fc.string(), estimate, (name, est) => {
+        expect(canAddTodo(name, est)).toBe(!isRejection(addTodo(parseDocument(""), name, est)));
+      }),
+    );
+  });
+});
 
 describe("addTodo（M4）", () => {
   it("今日やるのいちばん下に追加する", () => {

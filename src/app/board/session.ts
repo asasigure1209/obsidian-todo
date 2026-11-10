@@ -5,12 +5,13 @@ import { PAST_DAY_MESSAGE } from "@/app/messages";
 import { type Readable, Store } from "@/app/store";
 import { type BoardView, toBoardView } from "@/domain/board";
 import type { Clock } from "@/domain/clock";
+import { addTodo } from "@/domain/commands/card";
 import { isRejection, type LineRef } from "@/domain/commands/command";
 import { editWork, type WorkEdits } from "@/domain/commands/work";
 import { canEdit, type EditKind, toDayKey } from "@/domain/day";
 import type { DayFiles } from "@/domain/day-files";
 import { type DayDocument, parseDocument } from "@/domain/document/body";
-import type { Status } from "@/domain/document/todo-line";
+import type { Estimate, Status } from "@/domain/document/todo-line";
 import type { Notifier } from "@/domain/notifier";
 import { stepTimer, type TimerOp } from "@/domain/timer";
 
@@ -18,7 +19,7 @@ export type BoardState =
   | { kind: "loading" }
   | { kind: "missing" }
   | { kind: "unreadable" }
-  | ({ kind: "board" } & BoardView);
+  | ({ kind: "board"; canAdd: boolean } & BoardView);
 
 /** 1日のボードの窓口。表示する状態と、ボードからの操作をまとめて持つ。操作は、書き込めたら true で終わる */
 export interface BoardSession extends Readable<BoardState> {
@@ -32,6 +33,8 @@ export interface BoardSession extends Readable<BoardState> {
   next(card: LineRef): Promise<boolean>;
   /** M2 の「保存」。書き込めたら true、断られたり取りやめたりしたら false（ダイアログを開いたままにする） */
   editWork(card: LineRef, edits: WorkEdits): Promise<boolean>;
+  /** M4 の「追加」。今日やるのいちばん下に足す（design 8.6）。断られたら false（ダイアログを開いたままにする） */
+  addTodo(name: string, estimate?: Estimate): Promise<boolean>;
   /** 変更の購読をやめ、以後の読み込みと操作を何もしない */
   close(): void;
 }
@@ -111,6 +114,10 @@ class Session implements BoardSession {
     return this.edit("work", { kind: "edit", command: (doc) => editWork(doc, card, edits) });
   }
 
+  addTodo(name: string, estimate?: Estimate): Promise<boolean> {
+    return this.edit("add", { kind: "edit", command: (doc) => addTodo(doc, name, estimate) });
+  }
+
   close(): void {
     this.closed = true;
     this.stopListening();
@@ -121,7 +128,7 @@ class Session implements BoardSession {
     if (this.closed) {
       return Promise.resolve(false);
     }
-    if (!canEdit(kind, this.dayKey, toDayKey(this.deps.clock.now()))) {
+    if (!this.can(kind)) {
       this.deps.notifier.notify(PAST_DAY_MESSAGE);
       return Promise.resolve(false);
     }
@@ -169,8 +176,16 @@ class Session implements BoardSession {
     this.states.emit(this.doc ? this.boardState(this.doc) : MISSING);
   }
 
-  /** タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい */
+  /**
+   * タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい。
+   * canAdd も組み立てるたびに求める。開いたまま日付をまたいだら、次に読み直したときから追加の入口を出さない
+   */
   private boardState(doc: DayDocument): BoardState {
-    return { kind: "board", ...toBoardView(doc, this.deps.editor.current(), this.dayKey) };
+    const view = toBoardView(doc, this.deps.editor.current(), this.dayKey);
+    return { kind: "board", canAdd: this.can("add"), ...view };
+  }
+
+  private can(kind: EditKind): boolean {
+    return canEdit(kind, this.dayKey, toDayKey(this.deps.clock.now()));
   }
 }

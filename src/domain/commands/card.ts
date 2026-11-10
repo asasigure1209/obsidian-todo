@@ -19,13 +19,24 @@ const COLUMN_END = Number.POSITIVE_INFINITY;
 
 /** 今日やるのいちばん下に追加する（M4） */
 export function addTodo(doc: DayDocument, name: string, estimate?: Estimate): CommandResult {
-  const todo: TodoLine = { status: "todo", name: singleLine(name), ...(estimate && { estimate }) };
-  const text = formatTodoLine(todo);
-  if (parseTodoLine(text)?.name !== todo.name) {
+  const todo = newTodo(name, estimate);
+  if (!todo) {
     return INVALID;
   }
+  const text = formatTodoLine(todo);
   const block: TodoBlock = { kind: "todo", todo, head: { text, eol: "" }, children: [] };
   return { ...doc, segments: insertIntoColumn(doc.segments, block, "todo", COLUMN_END) };
+}
+
+/** M4 の「追加」を押せるか。addTodo と同じ決まりで、追加できる名前のときだけ */
+export function canAddTodo(name: string, estimate?: Estimate): boolean {
+  return newTodo(name, estimate) !== undefined;
+}
+
+/** 追加する TODO 行。書いて読み直すと同じ名前になるときだけ（空の名前や、見積もりと読める名前は追加しない） */
+function newTodo(name: string, estimate?: Estimate): TodoLine | undefined {
+  const todo: TodoLine = { status: "todo", name: singleLine(name), ...(estimate && { estimate }) };
+  return parseTodoLine(formatTodoLine(todo))?.name === todo.name ? todo : undefined;
 }
 
 /** カードを列の中の位置へ動かす。着手中へ動かすときは位置を使わない（startCard） */
