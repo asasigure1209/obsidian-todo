@@ -2,6 +2,7 @@ import type { LineRef } from "@/domain/commands/command";
 import { type DayDocument, type TodoBlock, todoBlocks } from "@/domain/document/body";
 import type { Estimate, Status } from "@/domain/document/todo-line";
 import { type WorkKind, workLines } from "@/domain/document/work-entry";
+import { type ScheduledEvent, scheduledEvents } from "@/domain/schedule";
 import { type RunningTarget, runningTarget, type Timer } from "@/domain/timer";
 
 /** 作業時間の1件。ref はそのまま作業時間のコマンドに渡せる（カードの中で n 番目の作業時間の行） */
@@ -34,6 +35,8 @@ export type Board = Record<Status, Card[]>;
 export interface BoardView {
   board: Board;
   running?: RunningCard;
+  /** その日の予定。読める行だけ、書いた順（design 7.3） */
+  events: ScheduledEvent[];
 }
 
 /** 計測中のカード。key は Card.key、startedAt から残り時間を出す。count は何個目のポモドーロか */
@@ -92,5 +95,6 @@ export function runningCard(
 export function toBoardView(doc: DayDocument, timer: Timer, dayKey: string): BoardView {
   const board = toBoard(doc);
   const running = runningCard(board, runningTarget(timer, doc, dayKey));
-  return running ? { board, running } : { board };
+  const events = scheduledEvents(doc);
+  return running ? { board, running, events } : { board, events };
 }

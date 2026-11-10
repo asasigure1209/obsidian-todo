@@ -3,6 +3,7 @@ import type { BoardSession } from "@/app/board/session";
 import type { Card } from "@/domain/board";
 import Column from "./Column.svelte";
 import type { Drop } from "./sortable";
+import Timeline from "./Timeline.svelte";
 
 interface Props {
   dayKey: string;
@@ -41,8 +42,10 @@ function handleDrop(drop: Drop): void {
   </header>
 
   <div class="board-body">
-    <!-- 予定のタイムラインは今後ここに置く（design 5章 M1） -->
     <aside class="sidebar">
+      {#if $session.kind === "board"}
+        <Timeline {dayKey} events={$session.events} />
+      {/if}
       <!-- 過去の日には追加できないので出さない（design 8.3） -->
       {#if $session.kind === "board" && $session.canAdd}
         <button type="button" class="add-todo" onclick={openAdd}>＋ TODOを追加</button>

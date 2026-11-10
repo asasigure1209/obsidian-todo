@@ -192,7 +192,7 @@ src/
     timer.ts              タイマーの状態遷移と経過分の計算（AD-6）
     timer-store.ts        タイマーの状態の保存先の型（実体は adapters/timer-store.ts）
     carryover.ts          前日の未完了の複製（design 7.8）
-    schedule.ts           予定・就業時間・休憩から、集中できる時間を出す（design 8.2）
+    schedule.ts           予定の行の読み取り、就業時間・休憩から集中できる時間、タイムラインの配置（design 7.3・8.2）
     clock.ts              現在時刻の取得元の型（実体は adapters/clock.ts）
     notifier.ts           利用者への知らせの型（実体は adapters/notifier.ts）
     day.ts                日付のキーと、その日にできる操作（design 8.3）
@@ -214,7 +214,7 @@ src/
     clock.ts              現在時刻
   ui/
     BoardView.ts          独自ビュー。M2〜M4 の Obsidian のダイアログ（Modal）もここに置き、ボードを閉じるときに一緒に閉じる
-    *.svelte              ボード（左サイドバーと3列）、カード、M2〜M4 ダイアログの中身（WorkDialog・AddTodoDialog など）
+    *.svelte              ボード（左サイドバーのタイムラインと3列）、カード、M2〜M4 ダイアログの中身（WorkDialog・AddTodoDialog など）
 tests/
   domain/                 ドメイン層の単体テスト。読み書きの往復テストを含む
   app/                    手書きの偽物（fakes/）を使うテスト
