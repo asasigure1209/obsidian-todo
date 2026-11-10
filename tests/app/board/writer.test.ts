@@ -95,6 +95,16 @@ describe("BoardWriter", () => {
     expect(await later).toBe(true);
   });
 
+  it("書き込みの例外で終わっても、書き込み中でなくなり、終わったことを知らせる", async () => {
+    const { editor, writer, settled } = setUp();
+    editor.failNext = true;
+
+    await writer.write(interrupt);
+
+    expect(writer.isWriting()).toBe(false);
+    expect(settled).toEqual([false]);
+  });
+
   it("書き込みの例外は onError へ渡し、false で終わる", async () => {
     const { editor, writer, errors } = setUp();
     editor.failNext = true;

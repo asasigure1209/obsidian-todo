@@ -7,6 +7,8 @@ import {
   runningTimer,
   TODAY,
 } from "@tests/app/fakes/timer";
+import { estimate } from "@tests/domain/document/arbitraries";
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type BoardSession, type BoardState, openBoard } from "@/app/board/session";
 import { DayEditor } from "@/app/day-editor";
@@ -56,6 +58,15 @@ function open(files: FakeDayFiles, dayKey = today, timer: Timer = undefined): Op
   const states: ReturnType<typeof summary>[] = [];
   session.subscribe((state) => states.push(summary(state)));
   return { session, states, notices, errors, clock, editor };
+}
+
+/** 開いて読み込み、受け取った状態をそのまま記録する */
+async function openWithStates(files: FakeDayFiles, dayKey = today) {
+  const opened = open(files, dayKey);
+  const received: BoardState[] = [];
+  opened.session.subscribe((state) => received.push(state));
+  await settle();
+  return { ...opened, received };
 }
 
 /** n 番目の TODO ブロックを、その行の文字列とともに指す */
@@ -460,15 +471,6 @@ describe("openBoard：作業時間の修正（M2）", () => {
   const minutesOf = (state: BoardState) =>
     state.kind === "board" ? state.board.done[0]?.workedMinutes : undefined;
 
-  /** 開いて読み込み、受け取った状態をそのまま記録する */
-  async function openWithStates(files: FakeDayFiles, dayKey = today) {
-    const opened = open(files, dayKey);
-    const received: BoardState[] = [];
-    opened.session.subscribe((state) => received.push(state));
-    await settle();
-    return { ...opened, received };
-  }
-
   it("保存すると書き込みを待たずに新しい合計を出し、書き込めたら true を返す", async () => {
     const files = new FakeDayFiles();
     files.write(today, body);
@@ -514,6 +516,128 @@ describe("openBoard：作業時間の修正（M2）", () => {
 
     expect(await session.editWork(a, edits)).toBe(false);
     expect(files.startedWrites).toBe(0);
+  });
+});
+
+describe("openBoard：TODOの追加（M4）", () => {
+  const body = "- [ ] a\n- [x] b\n";
+
+  it("追加すると書き込みを待たずに今日やるのいちばん下に出し、書き込めたら true を返す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session, states } = open(files);
+    await settle();
+    files.holdWrites();
+
+    const added = session.addTodo("メールの返信", "2");
+
+    expect(states.at(-1)).toEqual(["a,メールの返信", "", "b"]);
+    await settle();
+    files.releaseWrite();
+    expect(await added).toBe(true);
+    expect(files.body(today)).toBe("- [ ] a\n- [ ] メールの返信 [est:: 2]\n- [x] b\n");
+  });
+
+  it("見積もりを選ばなければ、見積もりなしで追加する", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session } = open(files);
+    await settle();
+
+    expect(await session.addTodo("メールの返信")).toBe(true);
+    expect(files.body(today)).toBe("- [ ] a\n- [ ] メールの返信\n- [x] b\n");
+  });
+
+  it("過去の日は書き込まずに知らせ、false を返す", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, body);
+    const { session, states, notices } = open(files, yesterday);
+    await settle();
+
+    expect(await session.addTodo("メールの返信")).toBe(false);
+    expect(files.startedWrites).toBe(0);
+    expect(states.at(-1)).toEqual(["a", "", "b"]);
+    expect(notices).toEqual(["過去の日は、作業時間の修正だけができます"]);
+  });
+
+  it("書式にならない名前は、表示を変えずに知らせて false を返す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session, states, notices } = open(files);
+    await settle();
+
+    expect(await session.addTodo("見積もりつき [est:: 1]")).toBe(false);
+    expect(files.body(today)).toBe(body);
+    expect(states.at(-1)).toEqual(["a", "", "b"]);
+    expect(notices).toEqual(["入力が書式に合わないため、追加・変更しませんでした"]);
+  });
+
+  /** 最後に受け取ったボードで追加できるか */
+  const canAddOf = (received: BoardState[]) => {
+    const last = received.at(-1);
+    return last?.kind === "board" ? last.canAdd : undefined;
+  };
+
+  it.each([
+    [today, true],
+    [yesterday, false],
+  ])("%s のボードで追加できるか：%s", async (dayKey, expected) => {
+    const files = new FakeDayFiles();
+    files.write(dayKey, body);
+    const { received } = await openWithStates(files, dayKey);
+
+    expect(canAddOf(received)).toBe(expected);
+  });
+
+  it("開いたまま日付をまたぐと、次に読み直したときから追加できない", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const received: BoardState[] = [];
+    const { session, clock } = open(files);
+    session.subscribe((state) => received.push(state));
+    await settle();
+
+    clock.advance(15 * 60);
+    files.write(today, body);
+    await settle();
+
+    expect(canAddOf(received)).toBe(false);
+  });
+
+  it("閉じた後は追加せず、false を返す", async () => {
+    const files = new FakeDayFiles();
+    files.write(today, body);
+    const { session } = open(files);
+    await settle();
+
+    session.close();
+
+    expect(await session.addTodo("メールの返信")).toBe(false);
+    expect(files.startedWrites).toBe(0);
+  });
+
+  it("どんな名前・見積もりでも、書き込めたら先読みの表示と読み直した表示が同じ", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.string(), estimate, async (name, est) => {
+        const files = new FakeDayFiles();
+        files.write(today, body);
+        const { session, states } = open(files);
+        await settle();
+        files.holdWrites();
+
+        const added = session.addTodo(name, est);
+        const previewed = states.at(-1);
+        await settle();
+        files.releaseWrite();
+        fc.pre(await added);
+        await settle();
+        const reopened = open(files);
+        await settle();
+
+        expect(reopened.states.at(-1)).toEqual(previewed);
+        expect(previewed).not.toEqual(["a", "", "b"]);
+      }),
+    );
   });
 });
 

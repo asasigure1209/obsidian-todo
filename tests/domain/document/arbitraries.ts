@@ -1,4 +1,5 @@
 import fc from "fast-check";
+import type { Estimate } from "@/domain/document/todo-line";
 
 /** TODO・作業時間・frontmatter・書式外の行が混ざりやすい本文 */
 export const markdownLike = fc
@@ -14,3 +15,8 @@ export const markdownLike = fc
     ),
   )
   .map((lines) => lines.map(([text, eol]) => text + eol).join(""));
+
+/** 見積もり（design 7.5）。省略もある */
+export const estimate = fc.option(fc.constantFrom<Estimate>("小", "1", "2", "3", "4"), {
+  nil: undefined,
+});

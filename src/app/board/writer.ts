@@ -32,17 +32,30 @@ export class BoardWriter {
     this.pending++;
     return this.editor
       .edit(this.dayKey, op, () => epoch === this.epoch)
-      .then((outcome) => {
-        if (outcome === "refused") {
-          this.epoch++;
-        }
-        this.pending--;
-        this.onSettled();
-        return outcome === "done";
-      })
+      .then(
+        (outcome) => {
+          if (outcome === "refused") {
+            this.epoch++;
+          }
+          this.settle();
+          return outcome === "done";
+        },
+        (error: unknown) => {
+          // 例外で終わっても書き込み中のまま残さない。残すと、以後の読み直しをずっと捨ててしまう
+          this.settle();
+          this.onError(error);
+          return false;
+        },
+      )
       .catch((error: unknown) => {
+        // 書き込みの後の知らせ（読み直し）の例外。書き込み中の数はもう減らしてある
         this.onError(error);
         return false;
       });
+  }
+
+  private settle(): void {
+    this.pending--;
+    this.onSettled();
   }
 }

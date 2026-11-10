@@ -71,10 +71,12 @@ async function save(): Promise<void> {
     return;
   }
   saving = true;
-  const saved = await session.editWork(card.ref, edits);
-  saving = false;
-  if (saved) {
-    close();
+  try {
+    if (await session.editWork(card.ref, edits)) {
+      close();
+    }
+  } finally {
+    saving = false;
   }
 }
 </script>
@@ -178,7 +180,7 @@ async function save(): Promise<void> {
 </div>
 
 <style>
-/* Obsidian のダイアログの幅をモックに合わせる（BoardView の WorkModal が付ける印） */
+/* Obsidian のダイアログの幅をモックに合わせる（BoardView の SvelteModal が付ける印） */
 :global(.daily-kanban-todo-work-modal) {
   width: min(720px, 90vw);
 }
