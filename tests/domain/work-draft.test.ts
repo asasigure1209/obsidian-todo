@@ -4,6 +4,7 @@ import type { WorkRecord } from "@/domain/board";
 import {
   addMinutes,
   canSave,
+  clearEntered,
   customProblem,
   draftTotal,
   EMPTY_CUSTOM,
@@ -153,13 +154,34 @@ describe("任意の欄（M2）", () => {
     expect(customProblem(entered.custom)).toBe("invalid");
   });
 
-  it("空欄で Enter を押すと、足さずに問題を出し、打ち直すと消える", () => {
+  it("空欄で Enter を押すと、足さずに空欄の問題を出す。保存は止めない", () => {
     const entered = enterCustom(draft, EMPTY_CUSTOM);
 
     expect(entered.draft).toBe(draft);
-    expect(customProblem(entered.custom)).toBe("invalid");
+    expect(customProblem(entered.custom)).toBe("empty");
+    expect(canSave(draft, entered.custom)).toBe(true);
+  });
+
+  it("空欄の問題は、打ち直すと打った値の問題に変わる", () => {
+    const entered = enterCustom(draft, EMPTY_CUSTOM).custom;
+
+    expect(customProblem(entered)).toBe("empty");
     expect(customProblem(typeCustom(false, Number.NaN))).toBeUndefined();
     expect(customProblem(typeCustom(true, 5))).toBe("pending");
+  });
+
+  it("下書きを変える操作の後は、空欄の問題が消える", () => {
+    const entered = enterCustom(draft, EMPTY_CUSTOM).custom;
+
+    expect(customProblem(entered)).toBe("empty");
+    expect(customProblem(clearEntered(entered))).toBeUndefined();
+  });
+
+  it("下書きを変える操作の後も、欄に残った値の問題は消えない", () => {
+    const entered = enterCustom(draft, typeCustom(true, 0)).custom;
+
+    expect(clearEntered(entered)).toEqual(typeCustom(true, 0));
+    expect(customProblem(clearEntered(entered))).toBe("invalid");
   });
 
   it("足せる分数が残っている間は「Enter で追加」の問題を出す", () => {
@@ -177,7 +199,6 @@ describe("任意の欄（M2）", () => {
 
   it("欄に値が残っている間は保存できない", () => {
     expect(canSave(draft, EMPTY_CUSTOM)).toBe(true);
-    expect(canSave(draft, enterCustom(draft, EMPTY_CUSTOM).custom)).toBe(true);
     expect(canSave(draft, typeCustom(true, 5))).toBe(false);
     expect(canSave(draft, typeCustom(true, 0))).toBe(false);
     expect(canSave(draft, unreadable)).toBe(false);
@@ -200,7 +221,8 @@ describe("任意の欄（M2）", () => {
           expect(canSave(entered.draft, entered.custom)).toBe(true);
         } else {
           expect(entered.draft).toBe(draft);
-          expect(customProblem(entered.custom)).toBe("invalid");
+          expect(customProblem(entered.custom)).toBe(filled ? "invalid" : "empty");
+          expect(canSave(entered.draft, entered.custom)).toBe(!filled);
           expect(entered.custom.filled).toBe(filled);
         }
         expect(added).toBe(filled && Number.isInteger(minutes) && minutes >= 1);

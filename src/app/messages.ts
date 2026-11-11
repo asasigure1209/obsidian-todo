@@ -29,8 +29,9 @@ export const TIME_PROBLEM_MESSAGES: Record<TimeProblem, string> = {
   outside: "休憩は就業時間の中にしてください。直すまでは前の就業時間と休憩を使います",
 };
 
-/** M2 の任意の欄の問題。値が残っている間は保存できない */
+/** M2 の任意の欄の問題。値が残っている間は保存できない（空欄の Enter は保存を止めない） */
 export const CUSTOM_PROBLEM_MESSAGES: Record<CustomProblem, string> = {
+  empty: "分数を入れてから Enter を押してください",
   invalid: "分数は1以上の整数で入れてください。直すか空にするまで保存できません",
   pending: "Enter で追加してください",
 };

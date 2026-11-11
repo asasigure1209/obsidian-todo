@@ -8,6 +8,7 @@ import { POMODORO_MINUTES, pomodoroEquivalent } from "@/domain/minutes";
 import {
   addMinutes,
   canSave,
+  clearEntered,
   customProblem,
   type DraftRow,
   draftTotal,
@@ -20,6 +21,7 @@ import {
   setMinutes,
   toEdits,
   typeCustom,
+  type WorkDraft,
 } from "@/domain/work-draft";
 
 interface Props {
@@ -60,6 +62,12 @@ function note(row: DraftRow, kind: WorkKind): string {
     return memo ? `割り込み：${memo}` : "割り込み";
   }
   return memo ?? "手動で修正";
+}
+
+/** 下書きを変える操作（追加・削除・分数の変更）。空欄で Enter を押したときの問題は古くなるので消す */
+function editDraft(next: WorkDraft): void {
+  draft = next;
+  custom = clearEntered(custom);
 }
 
 /** 数として読めない値（「1e」など）は value が空になるので、badInput で欄に値があると分かる */
@@ -118,7 +126,7 @@ async function save(): Promise<void> {
             aria-label="作業した分数"
             value={Number.isNaN(row.minutes) ? "" : row.minutes}
             oninput={(event) => {
-              draft = setMinutes(draft, row.key, event.currentTarget.valueAsNumber);
+              editDraft(setMinutes(draft, row.key, event.currentTarget.valueAsNumber));
             }}
           >
           <span class="unit">分</span>
@@ -132,7 +140,7 @@ async function save(): Promise<void> {
           class="clickable-icon remove"
           aria-label="この記録を削除"
           onclick={() => {
-            draft = removeRow(draft, row.key);
+            editDraft(removeRow(draft, row.key));
           }}
         >
           <svg
@@ -160,7 +168,7 @@ async function save(): Promise<void> {
           type="button"
           class="quick"
           onclick={() => {
-            draft = addMinutes(draft, minutes);
+            editDraft(addMinutes(draft, minutes));
           }}
         >
           {label}
@@ -180,7 +188,13 @@ async function save(): Promise<void> {
         >
       </div>
     </div>
-    <p id="work-dialog-custom-problem" class="custom-problem" aria-live="polite" hidden={!problem}>
+    <!-- 読み上げのため要素は常に置き、中身だけを切り替える -->
+    <p
+      id="work-dialog-custom-problem"
+      class="custom-problem"
+      class:shown={problem !== undefined}
+      aria-live="polite"
+    >
       {problem ? CUSTOM_PROBLEM_MESSAGES[problem] : ""}
     </p>
   </div>
@@ -347,12 +361,17 @@ async function save(): Promise<void> {
   text-align: right;
 }
 
-/* 任意の欄の問題。設定画面の問題（styles.css）と同じ色で、欄の下に右寄せで出す */
+/* 任意の欄の問題。設定画面の問題（styles.css）と同じ色で、欄の下に右寄せで出す。
+   問題がないときは .add の gap を打ち消して高さを取らない */
 .custom-problem {
-  margin: calc(-1 * var(--size-4-1)) 0 0;
+  margin: calc(-1 * var(--size-4-3)) 0 0;
   color: var(--text-error);
   font-size: var(--font-ui-smaller);
   text-align: right;
+}
+
+.custom-problem.shown {
+  margin-top: calc(-1 * var(--size-4-1));
 }
 
 .total {

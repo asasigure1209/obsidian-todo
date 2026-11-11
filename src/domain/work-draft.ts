@@ -64,8 +64,8 @@ export function draftTotal(draft: WorkDraft): number {
 }
 
 /**
- * 任意の分数の欄。filled は欄に何か入っているか（数として読めない値も含む）。minutes は読めなければ NaN。
- * entered は Enter を押したが足せなかったことで、打ち直すまで問題を出し続ける（空欄で Enter を押したとき）
+ * 任意の分数の欄。filled は欄に何か入っているか（数として読めない値も含む）。minutes は空欄か読めなければ NaN。
+ * entered は空欄で Enter を押したことで、打ち直すか下書きを変えるまで問題を出す
  */
 export interface CustomField {
   filled: boolean;
@@ -73,8 +73,8 @@ export interface CustomField {
   entered: boolean;
 }
 
-/** 欄の下に出す問題。invalid は足せない値、pending は足せるがまだ Enter を押していない値 */
-export type CustomProblem = "invalid" | "pending";
+/** 欄の下に出す問題。empty は空欄の Enter、invalid は足せない値、pending は足せるがまだ Enter を押していない値 */
+export type CustomProblem = "empty" | "invalid" | "pending";
 
 export const EMPTY_CUSTOM: CustomField = { filled: false, minutes: Number.NaN, entered: false };
 
@@ -88,15 +88,21 @@ export function enterCustom(
   draft: WorkDraft,
   custom: CustomField,
 ): { draft: WorkDraft; custom: CustomField } {
-  if (custom.filled && isWorkMinutes(custom.minutes)) {
-    return { draft: addMinutes(draft, custom.minutes), custom: EMPTY_CUSTOM };
+  const added = addMinutes(draft, custom.minutes);
+  if (added === draft) {
+    return { draft, custom: { ...custom, entered: true } };
   }
-  return { draft, custom: { ...custom, entered: true } };
+  return { draft: added, custom: EMPTY_CUSTOM };
+}
+
+/** 下書きを変える操作（追加・削除・分数の変更）の後。空欄の Enter の問題は古くなったので消す */
+export function clearEntered(custom: CustomField): CustomField {
+  return { ...custom, entered: false };
 }
 
 export function customProblem(custom: CustomField): CustomProblem | undefined {
   if (!custom.filled) {
-    return custom.entered ? "invalid" : undefined;
+    return custom.entered ? "empty" : undefined;
   }
   return isWorkMinutes(custom.minutes) ? "pending" : "invalid";
 }
