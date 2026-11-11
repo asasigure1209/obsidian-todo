@@ -37,7 +37,7 @@ const note = $derived(cardNote(card, cardPhase(status, running !== undefined)));
 {/snippet}
 
 {#if status === "todo"}
-  <article class="card todo">
+  <article class="board-card todo">
     <!-- 左の帯に優先の番号と、ドラッグのつまみ（モック M1） -->
     <div class="band">
       <span class="number">{position}</span>
@@ -56,7 +56,7 @@ const note = $derived(cardNote(card, cardPhase(status, running !== undefined)));
     </div>
   </article>
 {:else if status === "doing"}
-  <article class="card doing">
+  <article class="board-card doing">
     <p class="name">{card.name}</p>
     <Timer startedAt={running?.startedAt} {note}> {@render workLink()} </Timer>
     {#if running}
@@ -88,14 +88,15 @@ const note = $derived(cardNote(card, cardPhase(status, running !== undefined)));
     {/if}
   </article>
 {:else}
-  <article class="card done">
+  <article class="board-card done">
     <p class="name">{card.name}</p>
     {@render meta()}
   </article>
 {/if}
 
 <style>
-.card {
+/* Obsidian 本体の .card（縦並び・余白）とぶつからない名前にする */
+.board-card {
   display: flex;
   box-sizing: border-box;
   border: 1px solid var(--background-modifier-border);
