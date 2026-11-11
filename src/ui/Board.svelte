@@ -120,6 +120,7 @@ function handleDrop(drop: Drop): void {
               running={$session.running}
               onDrop={handleDrop}
               {openWork}
+              can={(kind) => canEdit(kind, dayKey, today)}
             />
           {/each}
         </div>

@@ -1,4 +1,5 @@
 import type { Card } from "@/domain/board";
+import type { Status } from "@/domain/document/todo-line";
 
 /** カードの見え方。着手中は計測中か停止中かで分ける */
 export type CardPhase = "todo" | "running" | "stopped" | "done";
@@ -21,4 +22,12 @@ const LEADS: Record<CardPhase, (card: Figures) => string | undefined> = {
 export function cardNote(card: Figures, phase: CardPhase): string {
   const estimate = card.estimate && `見積 ${card.estimate}`;
   return [LEADS[phase](card), estimate].filter(Boolean).join(" ／ ");
+}
+
+/** カードの見え方。着手中は、そのカードを計測しているかで計測中と停止中に分かれる */
+export function cardPhase(status: Status, running: boolean): CardPhase {
+  if (status !== "doing") {
+    return status;
+  }
+  return running ? "running" : "stopped";
 }

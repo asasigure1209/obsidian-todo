@@ -625,7 +625,7 @@ describe("openBoard：タイマー", () => {
 
     expect(received.at(-1)).toMatchObject({
       kind: "board",
-      running: { key: "- [/] 提案資料#0", startedAt: nine, count: 1 },
+      running: { key: "- [/] 提案資料#0", startedAt: nine },
     });
   });
 

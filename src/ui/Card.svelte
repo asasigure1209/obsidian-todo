@@ -1,7 +1,8 @@
 <script lang="ts">
 import type { BoardSession } from "@/app/board/session";
 import type { Card, RunningCard } from "@/domain/board";
-import { type CardPhase, cardNote } from "@/domain/card-note";
+import { cardNote, cardPhase } from "@/domain/card-note";
+import type { EditKind } from "@/domain/day";
 import type { Status } from "@/domain/document/todo-line";
 import Timer from "./Timer.svelte";
 
@@ -10,22 +11,29 @@ interface Props {
   status: Status;
   /** 列の中の順番（1から）。今日やるでは優先順として出す */
   position: number;
-  /** このカードを計測中なら、その開始時刻と何個目か */
+  /** このカードを計測中なら、そのカードの key と開始時刻。停止中とほかの列では undefined */
   running: RunningCard | undefined;
   session: BoardSession;
   /** 「時間を修正」（M2） */
   openWork: (card: Card) => void;
+  /** その日にできる操作か（design 8.3）。過去の日は中断と作業時間の修正だけ */
+  can: (kind: EditKind) => boolean;
 }
 
-const { card, status, position, running, session, openWork }: Props = $props();
+const { card, status, position, running, session, openWork, can }: Props = $props();
 
-/** 着手中は計測中か停止中かで見え方が変わる */
-const phase: CardPhase = $derived(status === "doing" ? (running ? "running" : "stopped") : status);
-const note = $derived(cardNote(card, phase));
+const note = $derived(cardNote(card, cardPhase(status, running !== undefined)));
 </script>
 
 {#snippet workLink()}
   <button type="button" class="work-link" onclick={() => openWork(card)}>時間を修正</button>
+{/snippet}
+
+{#snippet meta()}
+  <div class="meta">
+    <span class="figures">{note}</span>
+    {@render workLink()}
+  </div>
 {/snippet}
 
 {#if status === "todo"}
@@ -44,10 +52,7 @@ const note = $derived(cardNote(card, phase));
     </div>
     <div class="body">
       <p class="name">{card.name}</p>
-      <div class="meta">
-        <span>{note}</span>
-        {@render workLink()}
-      </div>
+      {@render meta()}
     </div>
   </article>
 {:else if status === "doing"}
@@ -59,11 +64,14 @@ const note = $derived(cardNote(card, phase));
         <button type="button" class="secondary" onclick={() => void session.interrupt()}>
           中断（割り込み）
         </button>
-        <button type="button" class="primary" onclick={() => void session.complete(card.ref)}>
-          完了にする
-        </button>
+        {#if can("complete")}
+          <button type="button" class="primary" onclick={() => void session.complete(card.ref)}>
+            完了にする
+          </button>
+        {/if}
       </div>
-    {:else}
+    {:else if can("move")}
+      <!-- 停止中の操作は、過去の日には出さない（design 8.3） -->
       <div class="actions column">
         <button type="button" class="start" onclick={() => void session.next(card.ref)}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -71,19 +79,18 @@ const note = $derived(cardNote(card, phase));
           </svg>
           次のポモドーロを開始
         </button>
-        <button type="button" class="secondary" onclick={() => void session.complete(card.ref)}>
-          完了にする
-        </button>
+        {#if can("complete")}
+          <button type="button" class="secondary" onclick={() => void session.complete(card.ref)}>
+            完了にする
+          </button>
+        {/if}
       </div>
     {/if}
   </article>
 {:else}
   <article class="card done">
     <p class="name">{card.name}</p>
-    <div class="meta">
-      <span class="figures">{note}</span>
-      {@render workLink()}
-    </div>
+    {@render meta()}
   </article>
 {/if}
 
@@ -189,6 +196,7 @@ const note = $derived(cardNote(card, phase));
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -208,17 +216,37 @@ const note = $derived(cardNote(card, phase));
   flex: 1;
 }
 
-.secondary {
+/*
+ * Obsidian 標準の button:hover などに負けないよう、.actions を前に付けて詳細度を上げ、
+ * hover・active・focus-visible の色も明示する（文字が背景に溶けないように）
+ */
+.actions .secondary {
   border: 1px solid var(--background-modifier-border-hover);
   background-color: var(--background-primary);
   color: var(--text-normal);
 }
 
+.actions .secondary:hover,
+.actions .secondary:active {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+}
+
 /* 主ボタンは黒地に白字。ダークでは明暗が反転する（design 5章 テーマ） */
-.primary {
+.actions .primary {
   border: none;
   background-color: var(--text-normal);
   color: var(--background-primary);
+}
+
+.actions .primary:hover,
+.actions .primary:active {
+  background-color: var(--text-muted);
+  color: var(--background-primary);
+}
+
+.actions button:focus-visible {
+  box-shadow: 0 0 0 3px var(--background-modifier-border-focus);
 }
 
 .actions .start {
@@ -232,5 +260,11 @@ const note = $derived(cardNote(card, phase));
   color: var(--text-on-accent);
   font-size: 15px;
   font-weight: var(--font-medium);
+}
+
+.actions .start:hover,
+.actions .start:active {
+  background-color: var(--interactive-accent-hover);
+  color: var(--text-on-accent);
 }
 </style>

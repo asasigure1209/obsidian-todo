@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Card } from "@/domain/board";
-import { cardNote } from "@/domain/card-note";
+import { cardNote, cardPhase } from "@/domain/card-note";
 
 type Figures = Pick<Card, "estimate" | "workedMinutes" | "pomodoros">;
 
@@ -55,5 +55,19 @@ describe("cardNote", () => {
 
   it("完了で見積もりがなければ「実績 N分」だけ", () => {
     expect(cardNote(card({ workedMinutes: 0 }), "done")).toBe("実績 0分");
+  });
+});
+
+describe("cardPhase", () => {
+  it("今日やると完了は列のまま", () => {
+    expect([cardPhase("todo", false), cardPhase("done", false)]).toEqual(["todo", "done"]);
+  });
+
+  it("着手中で計測中なら running", () => {
+    expect(cardPhase("doing", true)).toBe("running");
+  });
+
+  it("着手中で計測していなければ stopped", () => {
+    expect(cardPhase("doing", false)).toBe("stopped");
   });
 });

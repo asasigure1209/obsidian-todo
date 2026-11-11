@@ -23,6 +23,8 @@ $effect(() => {
   if (startedAt === undefined) {
     return;
   }
+  // 停止中から計測中に戻ったとき、止まっていた間の古い時刻で1秒描かない
+  now = Date.now();
   const id = window.setInterval(() => {
     now = Date.now();
   }, 1000);

@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { BoardSession } from "@/app/board/session";
 import type { Card as CardModel, RunningCard } from "@/domain/board";
+import type { EditKind } from "@/domain/day";
 import type { Status } from "@/domain/document/todo-line";
 import Card from "./Card.svelte";
 import { type Drop, sortable } from "./sortable";
@@ -13,9 +14,11 @@ interface Props {
   session: BoardSession;
   onDrop: (drop: Drop) => void;
   openWork: (card: CardModel) => void;
+  /** その日にできる操作か（design 8.3） */
+  can: (kind: EditKind) => boolean;
 }
 
-const { title, status, cards, running, session, onDrop, openWork }: Props = $props();
+const { title, status, cards, running, session, onDrop, openWork, can }: Props = $props();
 </script>
 
 <section class="column">
@@ -36,14 +39,15 @@ const { title, status, cards, running, session, onDrop, openWork }: Props = $pro
           {status}
           {session}
           {openWork}
+          {can}
           position={i + 1}
           running={running?.key === card.key ? running : undefined}
         />
       </li>
     {/each}
   </ol>
-  <!-- カードがあってもなくても、列のいちばん下に出す（design 5章 M1） -->
-  {#if status === "doing"}
+  <!-- カードがあってもなくても、列のいちばん下に出す（design 5章 M1）。動かせない日には出さない（8.3） -->
+  {#if status === "doing" && can("move")}
     <p class="hint">カードをここへ動かすとタイマーが始まります</p>
   {/if}
 </section>
