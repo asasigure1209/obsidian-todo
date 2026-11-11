@@ -17,6 +17,13 @@ interface Props {
 }
 
 const { dayKey, progress, showDay, openWorkLog, isToday, openReview }: Props = $props();
+
+let reviewButton: HTMLButtonElement | undefined = $state();
+
+/** 振り返りから戻ったときに Board が呼ぶ。ボタンが出ていなければ何もしない */
+export function focusReview(): void {
+  reviewButton?.focus();
+}
 </script>
 
 {#snippet dayNav(label: string, arrow: string, target: string, disabled: boolean)}
@@ -82,7 +89,9 @@ const { dayKey, progress, showDay, openWorkLog, isToday, openReview }: Props = $
   </a>
 
   {#if openReview}
-    <button type="button" class="review" onclick={openReview}>終業の振り返り</button>
+    <button type="button" class="review" bind:this={reviewButton} onclick={openReview}>
+      終業の振り返り
+    </button>
   {/if}
 </header>
 

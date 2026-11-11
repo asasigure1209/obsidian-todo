@@ -107,11 +107,11 @@ describe("toReview（終業の振り返り）", () => {
     const body = `- [x] ちょうど2倍 [est:: 1]
     - 50分 手動
 - [x] 2倍に届かない [est:: 1]
-    - 49分 ポモドーロ
+    - 47分 ポモドーロ
 - [x] 小は25分として数える [est:: 小]
     - 60分 ポモドーロ
 - [x] 4は100分として数える [est:: 4]
-    - 199分 ポモドーロ
+    - 192分 ポモドーロ
 - [x] 見積もりなし
     - 100分 ポモドーロ
 - [/] 未完了 [est:: 1]
@@ -122,6 +122,34 @@ describe("toReview（終業の振り返り）", () => {
       { name: "ちょうど2倍", ratio: 2 },
       { name: "小は25分として数える", ratio: 2.4 },
     ]);
+  });
+
+  it("2倍かは表と同じく小数1桁に丸めた実績で比べる（見積もり1で49分は、表の実績が2なので挙げる）", () => {
+    const body = `- [x] API設計レビューの指摘に対応 [est:: 1]
+    - 49分 ポモドーロ
+`;
+
+    expect(reviewOf(body).overruns).toStrictEqual([
+      { name: "API設計レビューの指摘に対応", ratio: 2 },
+    ]);
+  });
+
+  it("どんな本文でも、挙げた TODO は倍率が2以上で、見積もり4（表では4以上として ±0）を除けば表で超過になっている", () => {
+    fc.assert(
+      fc.property(markdownLike, (body) => {
+        const review = reviewOf(body);
+        const overrunRows = review.rows.filter((row) =>
+          review.overruns.some((overrun) => overrun.name === row.name),
+        );
+
+        for (const overrun of review.overruns) {
+          expect(overrun.ratio).toBeGreaterThanOrEqual(2);
+        }
+        for (const row of overrunRows.filter((r) => r.estimate !== "4")) {
+          expect(row.difference?.kind).toBe("over");
+        }
+      }),
+    );
   });
 
   it("カードがなければ、どの数も 0 で表も材料も空", () => {
@@ -275,8 +303,9 @@ describe("estimateRatio（見積もりの何倍かかったか）", () => {
     [50, "小", 2],
     [200, "4", 2],
     [62, "3", 0.8],
+    [49, "1", 2],
   ] as const)(
-    "%d分・見積もり %s は %d倍（小は25分、4は100分。小数1桁に四捨五入）",
+    "%d分・見積もり %s は %d倍（実績は表と同じ小数1桁。小は1、4は4として割り、小数1桁に四捨五入）",
     (minutes, estimate, ratio) => {
       expect(estimateRatio(minutes, estimate)).toBe(ratio);
     },

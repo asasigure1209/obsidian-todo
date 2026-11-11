@@ -1,7 +1,7 @@
-import { type Board, type Card, dayPomodoros, type WorkRecord } from "@/domain/board";
+import { type Board, type Card, dayPomodoros } from "@/domain/board";
 import type { Estimate } from "@/domain/document/todo-line";
 import type { WorkKind } from "@/domain/document/work-entry";
-import { HOUR_MINUTES, POMODORO_MINUTES, pomodoroEquivalent } from "@/domain/minutes";
+import { HOUR_MINUTES, POMODORO_MINUTES, pomodoroEquivalent, roundTenths } from "@/domain/minutes";
 
 /** 見積もりとの差（design 5章 M3）。over の pomodoros は小数1桁 */
 export type Difference = { kind: "over"; pomodoros: number } | { kind: "early" } | { kind: "even" };
@@ -57,7 +57,11 @@ export function toReview(board: Board): DayReview {
   return {
     completed: board.done.length,
     total: cards.length,
-    focusMinutes: sumMinutes(entries.filter((entry) => TIMED.has(entry.kind))),
+    // 実績（workedMinutes）は手動も含むので、ここだけ記録から数え直す
+    focusMinutes: entries.reduce(
+      (sum, entry) => (TIMED.has(entry.kind) ? sum + entry.minutes : sum),
+      0,
+    ),
     pomodoros: dayPomodoros(board),
     interruptions: interrupts.length,
     rows: board.done.map(toRow),
@@ -67,25 +71,17 @@ export function toReview(board: Board): DayReview {
   };
 }
 
-function sumMinutes(entries: WorkRecord[]): number {
-  return entries.reduce((sum, entry) => sum + entry.minutes, 0);
-}
-
 function toRow({ key, name, estimate, workedMinutes: minutes }: Card): ReviewRow {
   return estimate
     ? { key, name, estimate, minutes, difference: difference(minutes, estimate) }
     : { key, name, minutes };
 }
 
-/** 見積もりの2倍以上。丸める前の分数で比べる（49分は見積もり1の2倍に届かない） */
+/** 見積もりの2倍以上。表と同じく小数1桁の実績から出した倍率で比べる（見積もり1で49分は、実績2なので2倍） */
 function overrun({ name, estimate, workedMinutes }: Card): Overrun[] {
-  return estimate && workedMinutes >= 2 * estimateMinutes(estimate)
-    ? [{ name, ratio: estimateRatio(workedMinutes, estimate) }]
-    : [];
+  const ratio = estimate && estimateRatio(workedMinutes, estimate);
+  return ratio && ratio >= 2 ? [{ name, ratio }] : [];
 }
-
-/** 小数1桁に四捨五入する。引き算の誤差（2.3 − 1 = 1.2999…）もここで消す */
-const tenths = (value: number): number => Math.round(value * 10) / 10;
 
 /** 人の集中時間。「3h 05m」、1時間未満は「45m」 */
 export function formatFocusTime(minutes: number): string {
@@ -116,7 +112,7 @@ export function difference(minutes: number, estimate: Estimate): Difference {
   const actual = pomodoroEquivalent(minutes);
   const { lower, upper } = estimateRange(estimate);
   if (actual > upper) {
-    return { kind: "over", pomodoros: tenths(actual - upper) };
+    return { kind: "over", pomodoros: roundTenths(actual - upper) };
   }
   return actual < lower ? { kind: "early" } : { kind: "even" };
 }
@@ -128,14 +124,14 @@ export function formatDifference(value: Difference): string {
   return value.kind === "over" ? `+${value.pomodoros}（超過）` : DIFFERENCE_TEXT[value.kind];
 }
 
-/** 見積もりの分数。`小` は25分、`4` は100分として数える */
-function estimateMinutes(estimate: Estimate): number {
-  return estimate === "小" ? POMODORO_MINUTES : Number(estimate) * POMODORO_MINUTES;
+/** 見積もりのポモドーロ数。`小` は1（25分）、`4` は4（100分）として数える */
+function estimatePomodoros(estimate: Estimate): number {
+  return estimate === "小" ? 1 : Number(estimate);
 }
 
-/** 見積もりの何倍かかったか。小数1桁に四捨五入 */
+/** 見積もりの何倍かかったか。実績は表と同じ小数1桁で割り、小数1桁に四捨五入 */
 export function estimateRatio(minutes: number, estimate: Estimate): number {
-  return tenths(minutes / estimateMinutes(estimate));
+  return roundTenths(pomodoroEquivalent(minutes) / estimatePomodoros(estimate));
 }
 
 /** 「API設計レビューの指摘に対応は見積もりの2倍」 */

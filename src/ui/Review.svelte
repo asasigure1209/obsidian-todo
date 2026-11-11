@@ -12,24 +12,23 @@ import {
 interface Props {
   dayKey: string;
   /** ボードと同じ状態。ファイルが変わったら読み直した結果が来る（何も書き込まない） */
-  state: BoardState;
-  /** 知らせの文言の「今日」「この日」 */
-  dayWord: string;
-  /** 作業ログと日報のパス（「作業ログ/2026-11-03.md」）。フォルダは設定から */
+  view: BoardState;
+  /** 今日の振り返りか。過去の日は文言を「この日」「翌日」にする */
+  isToday: boolean;
+  /** 作業ログと日報のパス（「作業ログ/2026-11-03.md」）。開くときも同じパスを渡す */
   workLogPath: string;
   dailyReportPath: string;
   /** ボードに戻る */
   back: () => void;
-  /** その日の作業ログを開く（ヘッダーのリンクと同じ） */
-  openWorkLog: () => void;
-  /** その日の日報を開く。ファイルがなければ Obsidian が作る */
-  openDailyReport: () => void;
+  /** そのパスのファイルを開く。ファイルがなければ Obsidian が作る（作業ログはヘッダーのリンクと同じ） */
+  openWorkLog: (path: string) => void;
+  openDailyReport: (path: string) => void;
 }
 
 const {
   dayKey,
-  state,
-  dayWord,
+  view,
+  isToday,
   workLogPath,
   dailyReportPath,
   back,
@@ -37,13 +36,28 @@ const {
   openDailyReport,
 }: Props = $props();
 
-const review = $derived(state.kind === "board" ? toReview(state.board) : undefined);
+const review = $derived(view.kind === "board" ? toReview(view.board) : undefined);
+/** ボードの知らせと同じく、今日以外は「この日」と言う */
+const dayWord = $derived(isToday ? "今日" : "この日");
+const nextDayWord = $derived(isToday ? "明日" : "翌日");
+
+/** 開いたら「ボードに戻る」にフォーカスを置く */
+let backButton: HTMLButtonElement | undefined = $state();
+$effect(() => {
+  backButton?.focus();
+});
 </script>
 
 <!-- モック M3。ボードのタブの中身を切り替えて出す -->
 <div class="review">
   <header class="header">
-    <button type="button" class="clickable-icon back" aria-label="ボードに戻る" onclick={back}>
+    <button
+      type="button"
+      class="clickable-icon back"
+      aria-label="ボードに戻る"
+      bind:this={backButton}
+      onclick={back}
+    >
       <svg
         width="18"
         height="18"
@@ -106,7 +120,7 @@ const review = $derived(state.kind === "board" ? toReview(state.board) : undefin
             <span>単位：ポモドーロ（25分）</span>
             {#if review.unfinished > 0}
               <span>
-                未完了の{review.unfinished}件は、今日のリストに残したまま明日のリストへ複製されます
+                未完了の{review.unfinished}件は、{dayWord}のリストに残したまま{nextDayWord}のリストへ複製されます
               </span>
             {/if}
           </div>
@@ -117,7 +131,7 @@ const review = $derived(state.kind === "board" ? toReview(state.board) : undefin
         <section class="report">
           <h2 class="heading">日報を書く</h2>
           <p class="report-lead">
-            今日の実績と、作業ログから拾った出来事を材料として並べます。Good/Bad/Tryはあなたが書きます。
+            {dayWord}の実績と、作業ログから拾った出来事を材料として並べます。Good/Bad/Tryはあなたが書きます。
           </p>
           <ul class="materials">
             <li>
@@ -126,7 +140,7 @@ const review = $derived(state.kind === "board" ? toReview(state.board) : undefin
                 href={`#${workLogPath}`}
                 onclick={(event) => {
                   event.preventDefault();
-                  openWorkLog();
+                  openWorkLog(workLogPath);
                 }}
                 >{workLogPath}</a
               >
@@ -147,16 +161,20 @@ const review = $derived(state.kind === "board" ? toReview(state.board) : undefin
               <li>{formatOverrun(overrun)}</li>
             {/each}
           </ul>
-          <button type="button" class="open-report" onclick={openDailyReport}>
+          <button
+            type="button"
+            class="open-report"
+            onclick={() => openDailyReport(dailyReportPath)}
+          >
             {dailyReportPath}
             を開く
           </button>
         </section>
       </div>
     </div>
-  {:else if state.kind === "missing"}
+  {:else if view.kind === "missing"}
     <p class="message">{dayWord}のファイルがありません</p>
-  {:else if state.kind === "unreadable"}
+  {:else if view.kind === "unreadable"}
     <p class="message">{dayWord}のファイルを読めませんでした。ファイルを保存し直すと読み直します</p>
   {/if}
 </div>

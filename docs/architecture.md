@@ -58,7 +58,8 @@
   - ヘッダーの集中ポモドーロ数は、表示用のモデル（`dayPomodoros`）と予定（`dayPomodoroCapacity`）から UI が組み立てる。作業ログは `workspace.openLinkText` で開き、中身は読まない
   - 終業の振り返り（M3）は、同じ session の状態（3列のボード）から `domain/review.ts` の `toReview` で組み立てる。集計・差・倍率・時間の書式はここに置き、UI は並べるだけ。別の読み込みや窓口を持たないので、開いている間にファイルが変わればボードと同じ道で読み直し、ファイルがなくなればボードと同じ知らせを出す
   - M3 への切り替えは Board が持つ表示の状態（`reviewing`）だけで行う。ボードは作り直さずに隠し（`display: none`）、振り返りを上に出す。session もタイマーの表示もそのまま動くので、戻ったときに読み込み直さない。日を切り替えると Board を作り直すので、ボードに戻る
-  - 日報は作業ログと同じく `workspace.openLinkText` で開く（`BoardView.openDayNote`）。中身は読まず、書き込まない
+  - 戻ったら「終業の振り返り」に、開いたら「ボードに戻る」にフォーカスを移す
+  - 作業ログと日報のパスは Board が今の設定のフォルダから1か所で組み立て、表示（M3 の材料・ボタン）と開く処理の両方に使う。日報は作業ログと同じく `workspace.openLinkText` で開く（`BoardView.openNote`）。中身は読まず、書き込まない
   - `BoardSession` は Svelte のストアの約束（`subscribe` がすぐに今の値を渡し、購読をやめる関数を返す）と同じ形で返す。`app/` は `svelte` を import せずに済み、`.svelte` 側は `$` を付けて読むだけになる
   - ファイルの取得元は `domain/day-files.ts` の `DayFiles` 型で表し、実体は `adapters/vault.ts`。テストでは手書きの偽物（`tests/app/fakes/`）を使う
 
@@ -189,7 +190,7 @@
   - 使う側は、使う時点で今の設定を読む
     - `VaultDayFiles`（`adapters/vault.ts`）は TODO のフォルダを関数で受け取り、読み書きと変更イベントのたびにパスを求める
     - 満了の音（`adapters/notifier.ts` の `expiryAlarm`）は、鳴らすときに音の有無を読む
-    - 作業ログのリンクと日報を開くボタン（`BoardView`）は、開くときにフォルダを読む
+    - 作業ログのリンクと日報を開くボタンのパスは、Board が今の設定から求める（設定を変えたらその場で描き直す）
   - TODO のフォルダが変わったら、`main.ts` が `watch` で `VaultDayFiles.folderChanged()` を呼ぶ。購読中の受け取り手すべてにファイルの変更として知らせるので、ボードは新しいフォルダのファイルを読み直し、保留中のタイマー（AD-6）も新しいファイルで判定し直す
   - 就業時間と休憩は、Board が設定（`Readable<Settings>`）から読み、変わったらその場で描き直す。ボードは作り直さない
   - 設定画面（`ui/SettingsTab.ts`）は入力のたびに確かめて問題を出し、打ち終えたとき（Enter や欄を離れたとき）に正しければ `update` に渡す。打つたびに渡すと、日本語入力の途中や打ちかけの値で読み直してしまう。就業時間と休憩は組み合わせで確かめるので、入力の途中の値（`WorkdayDraft`）を設定画面が持つ
