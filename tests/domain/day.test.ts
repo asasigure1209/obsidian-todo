@@ -4,8 +4,11 @@ import {
   boardTitle,
   canEdit,
   canOpen,
+  dayFileName,
   dayFilePath,
+  dayKeyOfFileName,
   formatDayLabel,
+  isDayKey,
   nextDay,
   previousDay,
   toDayKey,
@@ -26,10 +29,27 @@ describe("toDayKey", () => {
   });
 });
 
+describe("isDayKey", () => {
+  it("暦にある日の YYYY-MM-DD だけを日付のキーとする", () => {
+    expect(isDayKey("2026-11-11")).toBe(true);
+    expect(isDayKey("2028-02-29")).toBe(true);
+    expect(isDayKey("2026-02-29")).toBe(false);
+    expect(isDayKey("2026-13-01")).toBe(false);
+    expect(isDayKey("2026-11-1")).toBe(false);
+    expect(isDayKey("x2026-11-11")).toBe(false);
+    expect(isDayKey("2026-11-11x")).toBe(false);
+    expect(isDayKey("999-01-01")).toBe(false);
+  });
+
+  it("性質：どの日の日付のキーも日付のキーとする", () => {
+    fc.assert(fc.property(dayKey, (key) => isDayKey(key)));
+  });
+});
+
 describe("canEdit（design 8.3）", () => {
   const today = "2026-11-05";
 
-  it.each(["move", "complete", "add", "work", "interrupt"] as const)(
+  it.each(["move", "complete", "add", "work", "interrupt", "create"] as const)(
     "今日は「%s」ができる",
     (kind) => {
       expect(canEdit(kind, today, today)).toBe(true);
@@ -42,6 +62,7 @@ describe("canEdit（design 8.3）", () => {
     expect(canEdit("move", "2026-11-04", today)).toBe(false);
     expect(canEdit("complete", "2025-12-31", today)).toBe(false);
     expect(canEdit("add", "2026-11-04", today)).toBe(false);
+    expect(canEdit("create", "2026-11-04", today)).toBe(false);
   });
 
   it("未来の日は何もできない", () => {
@@ -124,5 +145,34 @@ describe("dayFilePath（その日のファイル。design 7.1）", () => {
   it("フォルダの YYYY-MM-DD.md。TODO・作業ログ・日報が同じ日付のファイル名でつながる", () => {
     expect(dayFilePath("作業ログ", "2026-11-10")).toBe("作業ログ/2026-11-10.md");
     expect(dayFilePath("TODO", "2026-11-10")).toBe("TODO/2026-11-10.md");
+  });
+});
+
+describe("dayKeyOfFileName（ファイル名からその日）", () => {
+  it("YYYY-MM-DD.md の日付のキー", () => {
+    expect(dayKeyOfFileName("2026-11-10.md")).toBe("2026-11-10");
+  });
+
+  it("YYYY-MM-DD.md でない名前と、ありえない日付は undefined", () => {
+    for (const name of [
+      "2026-11-10.txt",
+      "2026-11-10.js",
+      "2026-11-10.md.bak",
+      "2026-11-10",
+      "x2026-11-10.md",
+      "2026-02-30.md",
+      "メモ.md",
+    ]) {
+      expect(dayKeyOfFileName(name)).toBeUndefined();
+    }
+  });
+
+  it("性質：その日のファイル名から、その日に戻る", () => {
+    fc.assert(
+      fc.property(dayKey, (key) => {
+        expect(dayKeyOfFileName(dayFileName(key))).toBe(key);
+        expect(dayFilePath("TODO", key)).toBe(`TODO/${dayFileName(key)}`);
+      }),
+    );
   });
 });

@@ -19,6 +19,16 @@ function shiftDay(dayKey: string, days: number): string {
   return toDayKey(date);
 }
 
+const DAY_KEY_LENGTH = "YYYY-MM-DD".length;
+
+/**
+ * 暦にある日の `YYYY-MM-DD` か。Date に通して同じ文字列に戻れば、形が正しく、ありえない日付（2月30日など）でもない。
+ * 長さは、4桁でない年（`999-01-01`）を除くために見る
+ */
+export function isDayKey(text: string): boolean {
+  return text.length === DAY_KEY_LENGTH && shiftDay(text, 0) === text;
+}
+
 /** 前日（ヘッダーの「前の日」。design 8.3） */
 export function previousDay(dayKey: string): string {
   return shiftDay(dayKey, -1);
@@ -52,13 +62,26 @@ export function boardTitle(dayKey: string, today: string): string {
   return dayKey === today ? "今日のボード" : `${monthDay(fromDayKey(dayKey))}のボード`;
 }
 
-/** その日のファイル。TODO・作業ログ・日報は、同じ日付のファイル名でつながる（design 7.1） */
-export function dayFilePath(folder: string, dayKey: string): string {
-  return `${folder}/${dayKey}.md`;
+const DAY_FILE_EXTENSION = ".md";
+
+/** その日のファイル名 `YYYY-MM-DD.md`。TODO・作業ログ・日報は、同じ日付のファイル名でつながる（design 7.1） */
+export function dayFileName(dayKey: string): string {
+  return dayKey + DAY_FILE_EXTENSION;
 }
 
-/** ボードの操作の種類。work は作業時間の追加・修正・削除（M2）、interrupt は計測の「中断」 */
-export type EditKind = "move" | "complete" | "add" | "work" | "interrupt";
+/** その日のファイル名（`YYYY-MM-DD.md`）なら、その日。ほかの名前とありえない日付は undefined */
+export function dayKeyOfFileName(name: string): string | undefined {
+  const dayKey = name.slice(0, -DAY_FILE_EXTENSION.length);
+  return name.endsWith(DAY_FILE_EXTENSION) && isDayKey(dayKey) ? dayKey : undefined;
+}
+
+/** その日のファイル */
+export function dayFilePath(folder: string, dayKey: string): string {
+  return `${folder}/${dayFileName(dayKey)}`;
+}
+
+/** ボードの操作の種類。work は作業時間の追加・修正・削除（M2）、interrupt は計測の「中断」、create は「今日のファイルを作る」（design 7.8） */
+export type EditKind = "move" | "complete" | "add" | "work" | "interrupt" | "create";
 
 /** 過去の日にもできる操作。中断は経過分を記録するだけなので、日付をまたいだボードでもその日の計測を止められる */
 const PAST_DAY_KINDS: ReadonlySet<EditKind> = new Set(["work", "interrupt"]);

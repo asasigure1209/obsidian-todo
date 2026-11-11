@@ -7,13 +7,14 @@ import {
   runningTimer,
   TODAY,
 } from "@tests/app/fakes/timer";
-import { estimate } from "@tests/domain/document/arbitraries";
+import { estimate, markdownLike } from "@tests/domain/document/arbitraries";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type BoardSession, type BoardState, openBoard } from "@/app/board/session";
 import { DayEditor } from "@/app/day-editor";
 import type { LineRef } from "@/domain/commands/command";
 import type { WorkEdits } from "@/domain/commands/work";
+import { parseDocument, todoBlocks } from "@/domain/document/body";
 import type { Timer } from "@/domain/timer";
 
 const today = TODAY;
@@ -748,5 +749,220 @@ describe("openBoard：タイマー", () => {
     await editor.edit(today, { kind: "next", card: proposal });
 
     expect(states).toHaveLength(count);
+  });
+});
+
+describe("openBoard：今日のファイルを作る", () => {
+  const previous = `---
+date: 2026-11-04
+events:
+  - 10:00-11:00 定例
+---
+- [/] 提案資料の構成を固める [est:: 3]
+    - 25分 ポモドーロ
+    - 参考：前回の資料
+- [x] 経費精算を提出
+    - 12分 ポモドーロ
+- [ ] 見積もりの返信を書く [est:: 1]
+`;
+  const carried = `---
+date: 2026-11-05
+---
+- [ ] 提案資料の構成を固める [est:: 3]
+    - 参考：前回の資料
+- [ ] 見積もりの返信を書く [est:: 1]
+`;
+  const frontmatterOnly = "---\ndate: 2026-11-05\n---\n";
+
+  it("直近の過去ファイルの未完了を複製して今日のファイルを作り、そのままボードに出す", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, previous);
+    const { session, states, notices } = open(files);
+    await settle();
+
+    expect(await session.createToday()).toBe(true);
+    await settle();
+
+    expect(files.body(today)).toBe(carried);
+    expect(states).toEqual([
+      "loading",
+      "missing",
+      ["提案資料の構成を固める,見積もりの返信を書く", "", ""],
+    ]);
+    expect(notices).toEqual([]);
+  });
+
+  it("週末を挟んでも直近の過去ファイルから複製し、日のファイルでないものは見ない", async () => {
+    const files = new FakeDayFiles();
+    files.write("2026-10-30", "- [ ] 古い\n");
+    files.write("2026-11-02", previous);
+    files.otherNames = ["2026-11-04.txt", "メモ.md"];
+    const { session } = open(files);
+    await settle();
+
+    await session.createToday();
+
+    expect(files.body(today)).toBe(carried);
+  });
+
+  it("過去のファイルがなければ frontmatter だけのファイルを作る", async () => {
+    const files = new FakeDayFiles();
+    files.write("2026-11-06", "- [ ] 未来の日\n");
+    const { session, states } = open(files);
+    await settle();
+
+    expect(await session.createToday()).toBe(true);
+    await settle();
+
+    expect(files.body(today)).toBe(frontmatterOnly);
+    expect(states.at(-1)).toEqual(["", "", ""]);
+  });
+
+  it("元のファイルは書き換えない", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, previous);
+    const { session } = open(files);
+    await settle();
+
+    await session.createToday();
+
+    expect(files.body(yesterday)).toBe(previous);
+  });
+
+  it("押したときにもうファイルがあれば、上書きせずに知らせて、あったファイルを出す", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, previous);
+    const { session, states, notices } = open(files);
+    await settle();
+    files.beforeCreate = () => files.write(today, "- [ ] Claude が作った\n");
+
+    expect(await session.createToday()).toBe(false);
+    await settle();
+
+    expect(files.body(today)).toBe("- [ ] Claude が作った\n");
+    expect(states.at(-1)).toEqual(["Claude が作った", "", ""]);
+    expect(notices).toEqual([
+      "今日のファイルはもうあったので、上書きせずにそのファイルを出しました",
+    ]);
+  });
+
+  it("作れなかったら知らせて例外を onError に渡し、ファイルなしのまま", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, previous);
+    const { session, states, notices, errors } = open(files);
+    await settle();
+    files.failNextCreate = true;
+
+    expect(await session.createToday()).toBe(false);
+    await settle();
+
+    expect(files.body(today)).toBeUndefined();
+    expect(states.at(-1)).toBe("missing");
+    expect(notices).toEqual(["今日のファイルを作れませんでした"]);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("過去のファイルを読めなかったら、作らずに知らせる", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, previous);
+    const { session, notices, errors } = open(files);
+    await settle();
+    files.failNextRead = true;
+
+    expect(await session.createToday()).toBe(false);
+
+    expect(files.body(today)).toBeUndefined();
+    expect(notices).toEqual(["今日のファイルを作れませんでした"]);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("過去の日は作らずに知らせる", async () => {
+    const files = new FakeDayFiles();
+    files.write("2026-11-03", previous);
+    const { session, notices } = open(files, yesterday);
+    await settle();
+
+    expect(await session.createToday()).toBe(false);
+
+    expect(files.body(yesterday)).toBeUndefined();
+    expect(notices).toEqual(["過去の日は、作業時間の修正だけができます"]);
+  });
+
+  it("作っている途中で閉じたら、もうあっても知らせない", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, previous);
+    const { session, notices } = open(files);
+    await settle();
+    files.beforeCreate = () => {
+      session.close();
+      files.write(today, "- [ ] Claude が作った\n");
+    };
+
+    expect(await session.createToday()).toBe(false);
+
+    expect(notices).toEqual([]);
+  });
+
+  it("作っている途中で閉じたら、作れなくても知らせない（例外は onError に渡す）", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, previous);
+    const { session, notices, errors } = open(files);
+    await settle();
+    files.failNextCreate = true;
+    files.beforeCreate = () => session.close();
+
+    expect(await session.createToday()).toBe(false);
+
+    expect(notices).toEqual([]);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("閉じた後は作らない", async () => {
+    const files = new FakeDayFiles();
+    const { session } = open(files);
+    await settle();
+
+    session.close();
+
+    expect(await session.createToday()).toBe(false);
+    expect(files.body(today)).toBeUndefined();
+  });
+
+  it("作っている間にもう一度押しても、作るのは1回だけ", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, previous);
+    const { session, notices } = open(files);
+    await settle();
+    let second: Promise<boolean> | undefined;
+    files.beforeCreate = () => {
+      second ??= session.createToday();
+    };
+
+    expect(await session.createToday()).toBe(true);
+    await settle();
+
+    expect(await second).toBe(false);
+    expect(files.body(today)).toBe(carried);
+    expect(notices).toEqual([]);
+  });
+
+  it("性質：どんな過去ファイルでも、作ったファイルを読むと過去の未完了だけが今日やるに並ぶ", async () => {
+    await fc.assert(
+      fc.asyncProperty(markdownLike, async (body) => {
+        const files = new FakeDayFiles();
+        files.write(yesterday, body);
+        const { session, states } = open(files);
+        await settle();
+        const unfinished = todoBlocks(parseDocument(body).segments)
+          .filter((block) => block.todo.status !== "done")
+          .map((block) => block.todo.name);
+
+        expect(await session.createToday()).toBe(true);
+        await settle();
+
+        expect(states.at(-1)).toEqual([unfinished.join(","), "", ""]);
+        expect(files.body(yesterday)).toBe(body);
+      }),
+    );
   });
 });

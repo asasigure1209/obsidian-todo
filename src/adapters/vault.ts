@@ -1,4 +1,4 @@
-import { normalizePath, type TAbstractFile, type Vault } from "obsidian";
+import { normalizePath, type TAbstractFile, TFile, type Vault } from "obsidian";
 import type { DayFiles } from "@/domain/day-files";
 
 /**
@@ -38,6 +38,38 @@ export class VaultDayFiles implements DayFiles {
     return true;
   }
 
+  /** フォルダの直下だけを見る（下のフォルダの中は見ない） */
+  async list(): Promise<string[]> {
+    const folder = this.vault.getFolderByPath(normalizePath(this.folder()));
+    return (folder?.children ?? []).filter((child) => child instanceof TFile).map((f) => f.name);
+  }
+
+  /**
+   * もうあれば上書きせずに false。TODO のフォルダがなければ先に作る。
+   * 確かめてから作るまでに別の書き手（Claude・同期ツール）が作って失敗したときも、あったものとして false
+   */
+  async create(dayKey: string, body: string): Promise<boolean> {
+    const path = this.pathOf(dayKey);
+    if (await this.exists(path)) {
+      return false;
+    }
+    await this.ensureFolder();
+    try {
+      await this.vault.create(path, body);
+      return true;
+    } catch (error) {
+      if (await this.exists(path)) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /** Obsidian の索引に加えてディスクも見る。Claude がディスクに直接書いて、まだ索引されていないファイルも「ある」とする */
+  private async exists(path: string): Promise<boolean> {
+    return this.vault.getAbstractFileByPath(path) !== null || this.vault.adapter.exists(path);
+  }
+
   /**
    * TODO のフォルダが変わった。どの日のファイルも別のファイルになるので、購読中の受け取り手すべてに変更として知らせる
    * （ボードは新しいフォルダのファイルを読み直し、保留中のタイマーは新しいファイルで判定し直す）
@@ -69,6 +101,21 @@ export class VaultDayFiles implements DayFiles {
         this.vault.offref(ref);
       }
     };
+  }
+
+  /** 確かめてから作るまでに別の書き手がフォルダを作って失敗したときは、そのまま続ける */
+  private async ensureFolder(): Promise<void> {
+    const folder = normalizePath(this.folder());
+    if (await this.exists(folder)) {
+      return;
+    }
+    try {
+      await this.vault.createFolder(folder);
+    } catch (error) {
+      if (!(await this.exists(folder))) {
+        throw error;
+      }
+    }
   }
 
   private pathOf(dayKey: string): string {

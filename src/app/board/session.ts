@@ -1,9 +1,10 @@
 import { LatestReader, type ReadResult } from "@/app/board/reader";
 import { BoardWriter } from "@/app/board/writer";
 import type { DayEditor } from "@/app/day-editor";
-import { PAST_DAY_MESSAGE } from "@/app/messages";
+import { CREATE_FAILED_MESSAGE, PAST_DAY_MESSAGE, TODAY_FILE_EXISTS_MESSAGE } from "@/app/messages";
 import { type Readable, Store } from "@/app/store";
 import { type BoardView, toBoardView } from "@/domain/board";
+import { carryOver, latestDayBefore } from "@/domain/carryover";
 import type { Clock } from "@/domain/clock";
 import { addTodo } from "@/domain/commands/card";
 import { isRejection, type LineRef } from "@/domain/commands/command";
@@ -35,6 +36,8 @@ export interface BoardSession extends Readable<BoardState> {
   editWork(card: LineRef, edits: WorkEdits): Promise<boolean>;
   /** M4 の「追加」。今日やるのいちばん下に足す（design 8.6）。断られたら false（ダイアログを開いたままにする） */
   addTodo(name: string, estimate?: Estimate): Promise<boolean>;
+  /** 「今日のファイルを作る」（design 7.8） */
+  createToday(): Promise<boolean>;
   /** 変更の購読をやめ、以後の読み込みと操作を何もしない */
   close(): void;
 }
@@ -67,6 +70,8 @@ class Session implements BoardSession {
   private doc: DayDocument | undefined;
   private loaded = false;
   private closed = false;
+  /** 「今日のファイルを作る」の途中 */
+  private creating = false;
   private readonly states: Store<BoardState>;
   private readonly writer: BoardWriter;
   private readonly reader: LatestReader;
@@ -118,6 +123,26 @@ class Session implements BoardSession {
     return this.edit("add", { kind: "edit", command: (doc) => addTodo(doc, name, estimate) });
   }
 
+  /**
+   * 書き込みの並び（DayEditor）には乗せない。まだないファイルを作るだけで、ほかの書き込みの対象と重ならないため。
+   * 作っている間にもう一度押されても何もしない（2回目が「もうあった」と知らせないように）
+   */
+  async createToday(): Promise<boolean> {
+    if (this.creating || !this.allowed("create")) {
+      return false;
+    }
+    this.creating = true;
+    try {
+      return await this.createFile();
+    } catch (error) {
+      this.deps.onError(error);
+      this.notifyUnlessClosed(CREATE_FAILED_MESSAGE);
+      return false;
+    } finally {
+      this.creating = false;
+    }
+  }
+
   close(): void {
     this.closed = true;
     this.stopListening();
@@ -125,15 +150,47 @@ class Session implements BoardSession {
 
   /** 書き込めたら true */
   private edit(kind: EditKind, op: TimerOp): Promise<boolean> {
-    if (this.closed) {
-      return Promise.resolve(false);
-    }
-    if (!this.can(kind)) {
-      this.deps.notifier.notify(PAST_DAY_MESSAGE);
+    if (!this.allowed(kind)) {
       return Promise.resolve(false);
     }
     this.preview(op);
     return this.writer.write(op);
+  }
+
+  /** 閉じていなくて、この日にできる操作か。この日にできない操作なら知らせる（design 8.3） */
+  private allowed(kind: EditKind): boolean {
+    if (this.closed) {
+      return false;
+    }
+    const can = canEdit(kind, this.dayKey, toDayKey(this.deps.clock.now()));
+    if (!can) {
+      this.deps.notifier.notify(PAST_DAY_MESSAGE);
+    }
+    return can;
+  }
+
+  /**
+   * 直近の過去ファイルを複製して作る。作れたら true。もうあったら上書きせずに知らせ、false。
+   * どちらも作成の変更で読み直すが、もうあったときは変更が来ないこともあるので読み直す。
+   * 待っている間に閉じたら、知らせも読み直しもしない
+   */
+  private async createFile(): Promise<boolean> {
+    const { files } = this.deps;
+    const previous = latestDayBefore(await files.list(), this.dayKey);
+    // 一覧を見てから読むまでに消えた過去ファイルは、ないものとして扱う
+    const body = previous === undefined ? "" : ((await files.read(previous)) ?? "");
+    const created = await files.create(this.dayKey, carryOver(body, this.dayKey));
+    if (!created) {
+      this.notifyUnlessClosed(TODAY_FILE_EXISTS_MESSAGE);
+      this.reloadUnlessClosed();
+    }
+    return created;
+  }
+
+  private notifyUnlessClosed(message: string): void {
+    if (!this.closed) {
+      this.deps.notifier.notify(message);
+    }
   }
 
   private reloadUnlessClosed(): void {
@@ -179,9 +236,5 @@ class Session implements BoardSession {
   /** タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい */
   private boardState(doc: DayDocument): BoardState {
     return { kind: "board", ...toBoardView(doc, this.deps.editor.current(), this.dayKey) };
-  }
-
-  private can(kind: EditKind): boolean {
-    return canEdit(kind, this.dayKey, toDayKey(this.deps.clock.now()));
   }
 }
