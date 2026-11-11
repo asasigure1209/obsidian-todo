@@ -7,7 +7,7 @@ Obsidian プラグイン。1日単位のカンバン型TODOボード＋ポモド
 ## ドキュメント
 
 - `docs/design.md` — 仕様の正。実装方法は書かない。仕様変更時は理由と 10章「検討の経緯」も更新
-- `docs/architecture.md` — 実装の決定（AD-1〜AD-10）
+- `docs/architecture.md` — 実装の決定（AD-1〜AD-11）
 - `docs/test-strategy.md` — TDD・テストサイズ・観点
 
 ## コマンド
@@ -35,7 +35,7 @@ pnpm verify                    # CI と同じ全項目
 
 - 層は `domain/` `app/` `adapters/` `ui/`、組み立ては `main.ts`。許可表は AD-10
 - 層をまたぐ import は `@/層名/...`。`../` 禁止
-- `domain/` は `obsidian`・`svelte` 禁止。`obsidian` は `ui/` では `BoardView.ts` のみ
+- `domain/` は `obsidian`・`svelte` 禁止。`obsidian` は `ui/` では `BoardView.ts` と `SettingsTab.ts` のみ
 - override は options を置き換えるため、各層に共通の `../` 禁止を必ず含める（`tests/config/biome-boundaries.test.ts` が検査）
 - 「型のみ import 可」は Biome で区別できないので手で守る
 
