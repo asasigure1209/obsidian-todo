@@ -100,11 +100,11 @@ export function formatActual(minutes: number): string {
  * 1〜3 は、その数ちょうど
  */
 function estimateRange(estimate: Estimate): { lower: number; upper: number } {
-  if (estimate === "小") {
-    return { lower: Number.NEGATIVE_INFINITY, upper: 1 };
-  }
-  const value = Number(estimate);
-  return { lower: value, upper: estimate === "4" ? Number.POSITIVE_INFINITY : value };
+  const value = estimatePomodoros(estimate);
+  return {
+    lower: estimate === "小" ? Number.NEGATIVE_INFINITY : value,
+    upper: estimate === "4" ? Number.POSITIVE_INFINITY : value,
+  };
 }
 
 /** 実績（小数1桁のポモドーロ）と見積もりの差 */
