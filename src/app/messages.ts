@@ -1,8 +1,9 @@
 import type { Rejection } from "@/domain/commands/command";
 import { parseTodoLine } from "@/domain/document/todo-line";
 import type { TimeProblem } from "@/domain/settings";
+import type { CustomProblem } from "@/domain/work-draft";
 
-/** 利用者への知らせの文言。day-editor・board/session・settings・BoardView・SettingsTab が使う */
+/** 利用者への知らせの文言。day-editor・board/session・settings・BoardView・SettingsTab・WorkDialog が使う */
 
 export const REJECTION_MESSAGES: Record<Rejection["rejected"], string> = {
   stale: "ファイルが変わっていたので、操作を取りやめて読み直しました",
@@ -27,4 +28,11 @@ export const TIME_PROBLEM_MESSAGES: Record<TimeProblem, string> = {
   format: "時刻は 9:00 の形で入れてください。直すまでは前の就業時間と休憩を使います",
   order: "終わりは始まりより後の時刻にしてください。直すまでは前の就業時間と休憩を使います",
   outside: "休憩は就業時間の中にしてください。直すまでは前の就業時間と休憩を使います",
+};
+
+/** M2 の任意の欄の問題。値が残っている間は保存できない（空欄の Enter は保存を止めない） */
+export const CUSTOM_PROBLEM_MESSAGES: Record<CustomProblem, string> = {
+  empty: "分数を入れてから Enter を押してください",
+  invalid: "分数は1以上の整数で入れてください。直すか空にするまで保存できません",
+  pending: "Enter で追加してください",
 };

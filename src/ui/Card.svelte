@@ -1,6 +1,8 @@
 <script lang="ts">
 import type { BoardSession } from "@/app/board/session";
 import type { Card, RunningCard } from "@/domain/board";
+import { cardNote, cardPhase } from "@/domain/card-note";
+import type { EditKind } from "@/domain/day";
 import type { Status } from "@/domain/document/todo-line";
 import Timer from "./Timer.svelte";
 
@@ -9,85 +11,133 @@ interface Props {
   status: Status;
   /** 列の中の順番（1から）。今日やるでは優先順として出す */
   position: number;
-  /** このカードを計測中なら、その開始時刻と何個目か */
+  /** このカードを計測中なら、そのカードの key と開始時刻。停止中とほかの列では undefined */
   running: RunningCard | undefined;
   session: BoardSession;
   /** 「時間を修正」（M2） */
   openWork: (card: Card) => void;
+  /** その日にできる操作か（design 8.3）。過去の日は中断と作業時間の修正だけ */
+  can: (kind: EditKind) => boolean;
 }
 
-const { card, status, position, running, session, openWork }: Props = $props();
+const { card, status, position, running, session, openWork, can }: Props = $props();
+
+const note = $derived(cardNote(card, cardPhase(status, running !== undefined)));
 </script>
 
-<article class="card" class:done={status === "done"}>
-  {#if status === "todo"}
-    <span class="number">{position}</span>
-  {/if}
-  <div class="body">
-    <p class="name">{card.name}</p>
-    <div class="meta">
-      <span class="figures">
-        {#if status !== "todo"}
-          <span>{status === "done" ? "実績" : "作業"} {card.workedMinutes}分</span>
-        {/if}
-        {#if card.estimate}
-          <span>見積 {card.estimate}</span>
-        {/if}
-      </span>
-      <button type="button" class="work-link" onclick={() => openWork(card)}>時間を修正</button>
+{#snippet workLink()}
+  <button type="button" class="work-link" onclick={() => openWork(card)}>時間を修正</button>
+{/snippet}
+
+{#snippet meta()}
+  <div class="meta">
+    <span class="figures">{note}</span>
+    {@render workLink()}
+  </div>
+{/snippet}
+
+{#if status === "todo"}
+  <article class="board-card todo">
+    <!-- 左の帯に優先の番号と、ドラッグのつまみ（モック M1） -->
+    <div class="band">
+      <span class="number">{position}</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <circle cx="9" cy="6" r="1.6" />
+        <circle cx="15" cy="6" r="1.6" />
+        <circle cx="9" cy="12" r="1.6" />
+        <circle cx="15" cy="12" r="1.6" />
+        <circle cx="9" cy="18" r="1.6" />
+        <circle cx="15" cy="18" r="1.6" />
+      </svg>
     </div>
-    {#if status === "doing"}
-      {#if running}
-        <Timer startedAt={running.startedAt} count={running.count} />
-        <div class="actions">
-          <button type="button" onclick={() => void session.interrupt()}>中断（割り込み）</button>
-          <button type="button" class="mod-cta" onclick={() => void session.complete(card.ref)}>
+    <div class="body">
+      <p class="name">{card.name}</p>
+      {@render meta()}
+    </div>
+  </article>
+{:else if status === "doing"}
+  <article class="board-card doing">
+    <p class="name">{card.name}</p>
+    <Timer startedAt={running?.startedAt} {note}> {@render workLink()} </Timer>
+    {#if running}
+      <div class="actions row">
+        <button type="button" class="secondary" onclick={() => void session.interrupt()}>
+          中断（割り込み）
+        </button>
+        {#if can("complete")}
+          <button type="button" class="primary" onclick={() => void session.complete(card.ref)}>
             完了にする
           </button>
-        </div>
-      {:else}
-        <div class="actions">
-          <button type="button" class="mod-cta" onclick={() => void session.next(card.ref)}>
-            次のポモドーロを開始
+        {/if}
+      </div>
+    {:else if can("move")}
+      <!-- 停止中の操作は、過去の日には出さない（design 8.3） -->
+      <div class="actions column">
+        <button type="button" class="start" onclick={() => void session.next(card.ref)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M7 5l12 7-12 7z" />
+          </svg>
+          次のポモドーロを開始
+        </button>
+        {#if can("complete")}
+          <button type="button" class="secondary" onclick={() => void session.complete(card.ref)}>
+            完了にする
           </button>
-          <button type="button" onclick={() => void session.complete(card.ref)}>完了にする</button>
-        </div>
-      {/if}
+        {/if}
+      </div>
     {/if}
-  </div>
-</article>
+  </article>
+{:else}
+  <article class="board-card done">
+    <p class="name">{card.name}</p>
+    {@render meta()}
+  </article>
+{/if}
 
 <style>
-.card {
+/* Obsidian 本体の .card（縦並び・余白）とぶつからない名前にする */
+.board-card {
   display: flex;
-  gap: var(--size-4-2);
-  padding: var(--size-4-2) var(--size-4-3);
+  box-sizing: border-box;
   border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
+  border-radius: 10px;
   background-color: var(--background-primary);
+}
+
+.todo {
+  gap: 10px;
+  padding: 14px 14px 14px 10px;
+}
+
+.band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 2px;
+  color: var(--text-faint);
 }
 
 .number {
   color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-monospace);
+  font-size: 13px;
 }
 
 .body {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--size-2-1);
+  gap: 8px;
   min-width: 0;
 }
 
 .name {
   margin: 0;
+  font-size: 15px;
+  font-weight: var(--font-medium);
+  line-height: 1.5;
   overflow-wrap: anywhere;
-}
-
-.done .name {
-  color: var(--text-muted);
-  text-decoration: line-through;
 }
 
 .meta {
@@ -96,32 +146,48 @@ const { card, status, position, running, session, openWork }: Props = $props();
   align-items: center;
   gap: var(--size-4-2);
   color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
+  font-size: 12px;
 }
 
-.figures {
-  display: flex;
-  gap: var(--size-4-2);
+/* 着手中はアクセント色の太い枠で、名前は太字（モック M1） */
+.doing {
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  border: 2px solid var(--interactive-accent);
+  border-radius: 12px;
+}
+
+.doing .name {
+  font-size: 16px;
+  font-weight: var(--font-bold);
+}
+
+.done {
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+}
+
+.done .name {
+  color: var(--text-muted);
+  font-weight: var(--font-normal);
+  text-decoration: line-through;
 }
 
 .done .figures {
-  gap: var(--size-2-2);
   color: var(--text-normal);
-}
-
-/* 完了は「実績 N分 ／ 見積 Y」と並べる（モック） */
-.done .figures span + span::before {
-  content: "／ ";
 }
 
 .work-link {
   height: auto;
-  padding: var(--size-2-3) var(--size-4-2);
+  padding: 6px 8px;
   border: none;
+  border-radius: 6px;
   background: none;
   box-shadow: none;
   color: var(--text-accent);
-  font-size: var(--font-ui-smaller);
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -132,7 +198,74 @@ const { card, status, position, running, session, openWork }: Props = $props();
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--size-4-2);
-  margin-top: var(--size-4-2);
+  gap: 10px;
+}
+
+.actions.column {
+  flex-direction: column;
+}
+
+.actions button {
+  height: 44px;
+  border-radius: 8px;
+  box-shadow: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.row button {
+  flex: 1;
+}
+
+/*
+ * Obsidian 標準の button:hover などに負けないよう、.actions を前に付けて詳細度を上げ、
+ * hover・active・focus-visible の色も明示する（文字が背景に溶けないように）
+ */
+.actions .secondary {
+  border: 1px solid var(--background-modifier-border-hover);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.actions .secondary:hover,
+.actions .secondary:active {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+/* 主ボタンは黒地に白字。ダークでは明暗が反転する（design 5章 テーマ） */
+.actions .primary {
+  border: none;
+  background-color: var(--text-normal);
+  color: var(--background-primary);
+}
+
+.actions .primary:hover,
+.actions .primary:active {
+  background-color: var(--text-muted);
+  color: var(--background-primary);
+}
+
+.actions button:focus-visible {
+  box-shadow: 0 0 0 3px var(--background-modifier-border-focus);
+}
+
+.actions .start {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  border: none;
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: 15px;
+  font-weight: var(--font-medium);
+}
+
+.actions .start:hover,
+.actions .start:active {
+  background-color: var(--interactive-accent-hover);
+  color: var(--text-on-accent);
 }
 </style>

@@ -29,7 +29,7 @@ export interface Card {
   estimate?: Estimate;
   /** 実績。作業時間の子の行の分数の合計（design 7.6） */
   workedMinutes: number;
-  /** 種類がポモドーロの作業時間の行の数。着手中には「この数＋1」個目と出す */
+  /** 種類がポモドーロの作業時間の行の数。着手中の「N個目」はこの数から出す（card-note.ts） */
   pomodoros: number;
   /** 作業時間の記録。本文の順番（M2） */
   entries: WorkRecord[];
@@ -46,11 +46,10 @@ export interface BoardView {
   events: ScheduledEvent[];
 }
 
-/** 計測中のカード。key は Card.key、startedAt から残り時間を出す。count は何個目のポモドーロか */
+/** 計測中のカード。key は Card.key、startedAt から残り時間を出す */
 export interface RunningCard {
   key: string;
   startedAt: number;
-  count: number;
 }
 
 /** 表示用のモデルを作る。直接編集で着手中が2件になっても、カードを消さずに両方出す */
@@ -87,15 +86,13 @@ function workEntries(block: TodoBlock): WorkRecord[] {
   }));
 }
 
-/** 計測中の対象のカード。「何個目」は、そのカードのポモドーロの行の数＋1 */
+/** 計測中の対象のカード */
 export function runningCard(
   board: Board,
   running: RunningTarget | undefined,
 ): RunningCard | undefined {
   const card = running && board.doing.find((c) => c.ref.index === running.target.index);
-  return card && running
-    ? { key: card.key, startedAt: running.timer.startedAt, count: card.pomodoros + 1 }
-    : undefined;
+  return card && running ? { key: card.key, startedAt: running.timer.startedAt } : undefined;
 }
 
 /** その日の集中ポモドーロ数（ヘッダーの完了数）。すべての列のカードの `ポモドーロ` の行の数で、中断と手動は数えない */
