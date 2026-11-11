@@ -229,6 +229,7 @@ src/
     notifier.ts           利用者への知らせの型（実体は adapters/notifier.ts）
     day.ts                日付のキー、前日・翌日、開ける日とその日にできる操作（design 8.3）、ヘッダーの日付とタブの見出し、作業ログのパス
     board.ts              本文とタイマーから3列の表示用モデルと、計測中のカード、その日の集中ポモドーロ数を作る（AD-2）
+    card-note.ts          カードの名前の下の1行（「2個目のポモドーロ ／ 見積 3」など。design 5章 M1）
     work-draft.ts         M2 の下書き（保存するまでの行の追加・変更・削除と、保存する変更）
     day-files.ts          その日のファイルの取得元の型（実体は adapters/vault.ts）
   app/
