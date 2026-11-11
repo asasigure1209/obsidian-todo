@@ -16,6 +16,9 @@ export const DISCARDED_MESSAGE =
   "着手中のカードが見つからないため、計測を取りやめました（記録していません）";
 export const missingMessage = (dayKey: string) => `${dayKey} のファイルがありません`;
 export const PAST_DAY_MESSAGE = "過去の日は、作業時間の修正だけができます";
+export const TODAY_FILE_EXISTS_MESSAGE =
+  "今日のファイルはもうあったので、上書きせずにそのファイルを出しました";
+export const CREATE_FAILED_MESSAGE = "今日のファイルを作れませんでした";
 export const WORK_LOG_FAILED_MESSAGE = "作業ログを開けませんでした";
 export const SETTINGS_SAVE_FAILED_MESSAGE =
   "設定を保存できませんでした。Obsidian を開き直すと、前の設定に戻ります";

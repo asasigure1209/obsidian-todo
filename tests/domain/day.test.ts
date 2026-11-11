@@ -6,6 +6,7 @@ import {
   canOpen,
   dayFilePath,
   formatDayLabel,
+  isDayKey,
   nextDay,
   previousDay,
   toDayKey,
@@ -26,10 +27,27 @@ describe("toDayKey", () => {
   });
 });
 
+describe("isDayKey", () => {
+  it("暦にある日の YYYY-MM-DD だけを日付のキーとする", () => {
+    expect(isDayKey("2026-11-11")).toBe(true);
+    expect(isDayKey("2028-02-29")).toBe(true);
+    expect(isDayKey("2026-02-29")).toBe(false);
+    expect(isDayKey("2026-13-01")).toBe(false);
+    expect(isDayKey("2026-11-1")).toBe(false);
+    expect(isDayKey("x2026-11-11")).toBe(false);
+    expect(isDayKey("2026-11-11x")).toBe(false);
+    expect(isDayKey("999-01-01")).toBe(false);
+  });
+
+  it("性質：どの日の日付のキーも日付のキーとする", () => {
+    fc.assert(fc.property(dayKey, (key) => isDayKey(key)));
+  });
+});
+
 describe("canEdit（design 8.3）", () => {
   const today = "2026-11-05";
 
-  it.each(["move", "complete", "add", "work", "interrupt"] as const)(
+  it.each(["move", "complete", "add", "work", "interrupt", "create"] as const)(
     "今日は「%s」ができる",
     (kind) => {
       expect(canEdit(kind, today, today)).toBe(true);
@@ -42,6 +60,7 @@ describe("canEdit（design 8.3）", () => {
     expect(canEdit("move", "2026-11-04", today)).toBe(false);
     expect(canEdit("complete", "2025-12-31", today)).toBe(false);
     expect(canEdit("add", "2026-11-04", today)).toBe(false);
+    expect(canEdit("create", "2026-11-04", today)).toBe(false);
   });
 
   it("未来の日は何もできない", () => {

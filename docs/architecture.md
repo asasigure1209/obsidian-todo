@@ -145,6 +145,14 @@
 - **影響：**
   - 複製のルールは、Claude とプラグインの2か所で守る必要がある。ルールは design 7.8 を正とする
   - 日中に予定が変わったら、Claude に頼んで `events` を書き直してもらう
+  - **「今日のファイルを作る」の作り：**
+    - 複製は `domain/carryover.ts` の純粋な関数。`latestDayBefore` がファイル名の一覧から直近の過去ファイルの日を選び（`.md` を外して `isDayKey` で暦にある日だけ。今日より前でいちばん新しい日）、`carryOver` が過去ファイルの本文から今日の本文を作る。本文は `document/body.ts` で読み、作った `DayDocument` を `serializeDocument` で書くので、ボードが読むのと同じ区切りになる（読んで戻すと一致することを性質で確かめる）。過去ファイルがなければ空の本文を渡す
+    - TODO 行は `formatTodoLine` で `[ ]` にして書き直す（名前と見積もりはそのまま）。子の行は `parseWorkEntry` で読める作業時間の行だけを外し、ほかは文字列のまま残す。改行は過去ファイルで最初に使われている改行に合わせ、末尾に改行を付ける
+    - `DayFiles` に `list()`（TODO のフォルダの直下のファイル名）と `create(dayKey, body)`（もうあれば上書きせずに false）を足す。どの名前が日のファイルかは domain が決め、`adapters/vault.ts` はフォルダの子を返すだけにする（下のフォルダの中は見ない）。`create` は TODO のフォルダがなければ先に作る。確かめてから作るまでに別の書き手が作って `vault.create` が失敗したときも、ファイルがあれば false にする
+    - 窓口は `BoardSession.createToday`。今日のボードだけ（`canEdit` の `create`。過去の日は断って知らせる）。「一覧 → 過去ファイルを読む → 作る」の順で、作れたら作成の変更イベントで読み直してボードに出す。もうあったら知らせて読み直す（あったファイルを出す）。一覧・読み込み・作成のどこで失敗しても作らずに知らせ、例外は `onError` へ
+    - 書き込みの並び（`DayEditor`。AD-3・AD-6）には乗せない。まだないファイルを作るだけで、並びに乗る書き込み（ある日のファイルの `vault.process`）と対象が重ならないため。上書きしないことは `create` が守る
+    - 作っている間にもう一度押されても何もしない（2回目が「もうあった」と知らせないように）
+    - 一覧を見てから読むまでに過去ファイルが消えたときは、過去ファイルがないものとして frontmatter だけで作る
 
 ### AD-9 ビルドは公式サンプルの構成、テストは Vitest
 
@@ -223,14 +231,14 @@ src/
     timer-store.ts        タイマーの状態の保存先の型（実体は adapters/timer-store.ts）
     settings.ts           設定の型と既定値、保存領域から読んだ値の検査（parseSettings）、設定画面の入力の確かめ（AD-11）
     settings-store.ts     設定の保存先の型（実体は adapters/settings-store.ts）
-    carryover.ts          前日の未完了の複製（design 7.8）
+    carryover.ts          前日の未完了の複製。直近の過去ファイルの選び方と、今日のファイルの本文（design 7.8・AD-8）
     schedule.ts           予定の行と設定の時刻（parseClock）の読み取り、就業時間・休憩から集中できる時間とその日に可能なポモドーロ数、タイムラインの配置（design 7.3・8.2）
     clock.ts              現在時刻の取得元の型（実体は adapters/clock.ts）
     notifier.ts           利用者への知らせの型（実体は adapters/notifier.ts）
     day.ts                日付のキー、前日・翌日、開ける日とその日にできる操作（design 8.3）、ヘッダーの日付とタブの見出し、作業ログのパス
     board.ts              本文とタイマーから3列の表示用モデルと、計測中のカード、その日の集中ポモドーロ数を作る（AD-2）
     work-draft.ts         M2 の下書き（保存するまでの行の追加・変更・削除と、保存する変更）
-    day-files.ts          その日のファイルの取得元の型（実体は adapters/vault.ts）
+    day-files.ts          その日のファイルの取得元の型（読み書き・変更の購読・フォルダの一覧・作成。実体は adapters/vault.ts）
   app/
     board/
       session.ts          1日のボードの窓口。ファイルの変更を受けて読み直す（AD-2）。操作を先読みしてから、day-editor に渡す（AD-3）
@@ -241,7 +249,7 @@ src/
     settings.ts           設定の窓口（AppSettings）。変えた設定をすぐに流して保存する（AD-11）
     messages.ts           利用者への知らせの文言
   adapters/
-    vault.ts              ファイルの取得・変更イベントの購読。フォルダは使うたびに今の設定から求める
+    vault.ts              ファイルの取得・作成・フォルダの一覧・変更イベントの購読。フォルダは使うたびに今の設定から求める
     plugin-data.ts        プラグインの保存領域（data.json）。項目ごとの読み書きを1本に並べる（AD-11）
     timer-store.ts        タイマー状態の保存（data.json の timer）。読んだ値の形の検査（parseTimer）
     settings-store.ts     設定の保存（data.json の settings）。形の検査は app/ が domain の parseSettings で行う

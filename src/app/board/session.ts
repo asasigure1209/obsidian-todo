@@ -1,9 +1,10 @@
 import { LatestReader, type ReadResult } from "@/app/board/reader";
 import { BoardWriter } from "@/app/board/writer";
 import type { DayEditor } from "@/app/day-editor";
-import { PAST_DAY_MESSAGE } from "@/app/messages";
+import { CREATE_FAILED_MESSAGE, PAST_DAY_MESSAGE, TODAY_FILE_EXISTS_MESSAGE } from "@/app/messages";
 import { type Readable, Store } from "@/app/store";
 import { type BoardView, toBoardView } from "@/domain/board";
+import { carryOver, latestDayBefore } from "@/domain/carryover";
 import type { Clock } from "@/domain/clock";
 import { addTodo } from "@/domain/commands/card";
 import { isRejection, type LineRef } from "@/domain/commands/command";
@@ -35,6 +36,8 @@ export interface BoardSession extends Readable<BoardState> {
   editWork(card: LineRef, edits: WorkEdits): Promise<boolean>;
   /** M4 の「追加」。今日やるのいちばん下に足す（design 8.6）。断られたら false（ダイアログを開いたままにする） */
   addTodo(name: string, estimate?: Estimate): Promise<boolean>;
+  /** 「今日のファイルを作る」（design 7.8） */
+  createToday(): Promise<boolean>;
   /** 変更の購読をやめ、以後の読み込みと操作を何もしない */
   close(): void;
 }
@@ -67,6 +70,8 @@ class Session implements BoardSession {
   private doc: DayDocument | undefined;
   private loaded = false;
   private closed = false;
+  /** 「今日のファイルを作る」の途中 */
+  private creating = false;
   private readonly states: Store<BoardState>;
   private readonly writer: BoardWriter;
   private readonly reader: LatestReader;
@@ -118,6 +123,30 @@ class Session implements BoardSession {
     return this.edit("add", { kind: "edit", command: (doc) => addTodo(doc, name, estimate) });
   }
 
+  /**
+   * 書き込みの並び（DayEditor）には乗せない。まだないファイルを作るだけで、ほかの書き込みの対象と重ならないため。
+   * 作っている間にもう一度押されても何もしない（2回目が「もうあった」と知らせないように）
+   */
+  async createToday(): Promise<boolean> {
+    if (this.closed || this.creating) {
+      return false;
+    }
+    if (!this.can("create")) {
+      this.deps.notifier.notify(PAST_DAY_MESSAGE);
+      return false;
+    }
+    this.creating = true;
+    try {
+      return await this.createFile();
+    } catch (error) {
+      this.deps.onError(error);
+      this.deps.notifier.notify(CREATE_FAILED_MESSAGE);
+      return false;
+    } finally {
+      this.creating = false;
+    }
+  }
+
   close(): void {
     this.closed = true;
     this.stopListening();
@@ -134,6 +163,23 @@ class Session implements BoardSession {
     }
     this.preview(op);
     return this.writer.write(op);
+  }
+
+  /**
+   * 直近の過去ファイルを複製して作る。作れたら true。もうあったら上書きせずに知らせ、false。
+   * どちらも作成の変更で読み直すが、もうあったときは変更が来ないこともあるので読み直す
+   */
+  private async createFile(): Promise<boolean> {
+    const { files, notifier } = this.deps;
+    const previous = latestDayBefore(await files.list(), this.dayKey);
+    // 一覧を見てから読むまでに消えた過去ファイルは、ないものとして扱う
+    const body = previous === undefined ? "" : ((await files.read(previous)) ?? "");
+    const created = await files.create(this.dayKey, carryOver(body, this.dayKey));
+    if (!created) {
+      notifier.notify(TODAY_FILE_EXISTS_MESSAGE);
+      this.reloadUnlessClosed();
+    }
+    return created;
   }
 
   private reloadUnlessClosed(): void {

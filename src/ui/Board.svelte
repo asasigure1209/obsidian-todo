@@ -61,6 +61,8 @@ const today = $derived(toDayKey(now));
 const isToday = $derived(dayKey === today);
 /** 過去の日には追加できない（design 8.3）。書き込むときは session が改めて確かめる */
 const canAdd = $derived(canEdit("add", dayKey, today));
+/** 「今日のファイルを作る」は今日のボードだけ（design 7.8） */
+const canCreate = $derived(canEdit("create", dayKey, today));
 
 $effect(() => {
   // today が変わるたびに呼ぶ
@@ -125,6 +127,12 @@ function handleDrop(drop: Drop): void {
         </div>
       {:else if $session.kind === "missing"}
         <p class="message">{dayWord}のファイルがありません</p>
+        <!-- 過去の日は作れない（design 7.8・8.3）。作るときは session が改めて確かめる -->
+        {#if canCreate}
+          <button type="button" class="create-day" onclick={() => void session.createToday()}>
+            今日のファイルを作る
+          </button>
+        {/if}
       {:else if $session.kind === "unreadable"}
         <p class="message">
           {dayWord}のファイルを読めませんでした。ファイルを保存し直すと読み直します
@@ -189,5 +197,16 @@ function handleDrop(drop: Drop): void {
 
 .message {
   color: var(--text-muted);
+}
+
+/* 「今日のファイルがありません」の下に置く（design 7.8） */
+.create-day {
+  height: 44px;
+  padding: 0 var(--size-4-5);
+  border-radius: var(--radius-m);
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-medium);
 }
 </style>

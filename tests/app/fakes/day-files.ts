@@ -17,6 +17,11 @@ export class FakeDayFiles implements DayFiles {
   private readonly heldWrites: Array<() => void> = [];
   failNextRead = false;
   failNextWrite = false;
+  failNextCreate = false;
+  /** TODO のフォルダにある、日のファイルではないファイルの名前（list が日のファイルと一緒に返す） */
+  otherNames: string[] = [];
+  /** create が作る直前に呼ぶ（読んでから作るまでに Claude が先に作った、などを差し込む） */
+  beforeCreate: (() => void) | undefined;
   /** 始まった書き込みの数 */
   startedWrites = 0;
   /** 読み込みの数 */
@@ -53,6 +58,24 @@ export class FakeDayFiles implements DayFiles {
     if (next !== body) {
       this.write(dayKey, next);
     }
+    return true;
+  }
+
+  async list(): Promise<string[]> {
+    return [...[...this.bodies.keys()].map((dayKey) => `${dayKey}.md`), ...this.otherNames];
+  }
+
+  /** もうあれば上書きせずに false。作ったら変更を知らせる */
+  async create(dayKey: string, body: string): Promise<boolean> {
+    this.beforeCreate?.();
+    if (this.failNextCreate) {
+      this.failNextCreate = false;
+      throw new Error("作れない");
+    }
+    if (this.bodies.has(dayKey)) {
+      return false;
+    }
+    this.write(dayKey, body);
     return true;
   }
 
