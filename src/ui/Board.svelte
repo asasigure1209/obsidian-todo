@@ -63,6 +63,17 @@ const isToday = $derived(dayKey === today);
 const canAdd = $derived(canEdit("add", dayKey, today));
 /** 「今日のファイルを作る」は今日のボードだけ（design 7.8） */
 const canCreate = $derived(canEdit("create", dayKey, today));
+/** 作っている間はボタンを押せなくする（押しても反応がないように見せない） */
+let creating = $state(false);
+
+async function createToday(): Promise<void> {
+  creating = true;
+  try {
+    await session.createToday();
+  } finally {
+    creating = false;
+  }
+}
 
 $effect(() => {
   // today が変わるたびに呼ぶ
@@ -129,7 +140,7 @@ function handleDrop(drop: Drop): void {
         <p class="message">{dayWord}のファイルがありません</p>
         <!-- 過去の日は作れない（design 7.8・8.3）。作るときは session が改めて確かめる -->
         {#if canCreate}
-          <button type="button" class="create-day" onclick={() => void session.createToday()}>
+          <button type="button" class="create-day" disabled={creating} onclick={createToday}>
             今日のファイルを作る
           </button>
         {/if}

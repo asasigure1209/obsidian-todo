@@ -50,7 +50,7 @@ export class VaultDayFiles implements DayFiles {
    */
   async create(dayKey: string, body: string): Promise<boolean> {
     const path = this.pathOf(dayKey);
-    if (this.vault.getFileByPath(path)) {
+    if (await this.exists(path)) {
       return false;
     }
     await this.ensureFolder();
@@ -58,11 +58,16 @@ export class VaultDayFiles implements DayFiles {
       await this.vault.create(path, body);
       return true;
     } catch (error) {
-      if (this.vault.getFileByPath(path)) {
+      if (await this.exists(path)) {
         return false;
       }
       throw error;
     }
+  }
+
+  /** Obsidian の索引に加えてディスクも見る。Claude がディスクに直接書いて、まだ索引されていないファイルも「ある」とする */
+  private async exists(path: string): Promise<boolean> {
+    return this.vault.getAbstractFileByPath(path) !== null || this.vault.adapter.exists(path);
   }
 
   /**
@@ -98,10 +103,18 @@ export class VaultDayFiles implements DayFiles {
     };
   }
 
+  /** 確かめてから作るまでに別の書き手がフォルダを作って失敗したときは、そのまま続ける */
   private async ensureFolder(): Promise<void> {
     const folder = normalizePath(this.folder());
-    if (!this.vault.getFolderByPath(folder)) {
+    if (await this.exists(folder)) {
+      return;
+    }
+    try {
       await this.vault.createFolder(folder);
+    } catch (error) {
+      if (!(await this.exists(folder))) {
+        throw error;
+      }
     }
   }
 

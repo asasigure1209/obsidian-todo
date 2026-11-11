@@ -1,4 +1,4 @@
-import { isDayKey } from "@/domain/day";
+import { dayKeyOfFileName } from "@/domain/day";
 import {
   type DayDocument,
   type Line,
@@ -12,16 +12,16 @@ import { parseWorkEntry } from "@/domain/document/work-entry";
 
 /** 前日の未完了の複製（design 7.8） */
 
-const EXTENSION = ".md";
-
 /** 直近の過去ファイルの日。TODO のフォルダにある、今日より前の日付の `YYYY-MM-DD.md` のうちいちばん新しい日 */
 export function latestDayBefore(names: readonly string[], today: string): string | undefined {
-  return names
-    .filter((name) => name.endsWith(EXTENSION))
-    .map((name) => name.slice(0, -EXTENSION.length))
-    .filter((dayKey) => isDayKey(dayKey) && dayKey < today)
-    .sort()
-    .at(-1);
+  let latest: string | undefined;
+  for (const name of names) {
+    const dayKey = dayKeyOfFileName(name);
+    if (dayKey && dayKey < today && dayKey > (latest ?? "")) {
+      latest = dayKey;
+    }
+  }
+  return latest;
 }
 
 /**
@@ -49,10 +49,28 @@ function reopen(block: TodoBlock): TodoBlock {
     kind: "todo",
     todo,
     head: newLine(formatTodoLine(todo)),
-    children: block.children
-      .filter((line) => parseWorkEntry(line.text) === undefined)
-      .map((line) => newLine(line.text)),
+    children: withoutWork(block.children).map((line) => newLine(line.text)),
   };
+}
+
+/**
+ * 作業時間の行と、それに続く、より深く字下げされた行（作業時間の行に付けたメモ）を外す。
+ * より深いとは、字下げが作業時間の行の字下げで始まり、それより長いこと（タブとスペースが混ざっても決まる）
+ */
+function withoutWork(children: readonly Line[]): Line[] {
+  let workIndent: string | undefined;
+  return children.filter((line) => {
+    if (workIndent !== undefined && isDeeper(line.text, workIndent)) {
+      return false;
+    }
+    workIndent = parseWorkEntry(line.text)?.indent;
+    return workIndent === undefined;
+  });
+}
+
+/** 子の行は字下げの後に空白でない文字が来る（body.ts）ので、先頭の空白を除いた分が字下げの長さ */
+function isDeeper(text: string, indent: string): boolean {
+  return text.startsWith(indent) && text.length - text.trimStart().length > indent.length;
 }
 
 function newLine(text: string): Line {

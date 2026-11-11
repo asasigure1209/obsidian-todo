@@ -128,11 +128,7 @@ class Session implements BoardSession {
    * 作っている間にもう一度押されても何もしない（2回目が「もうあった」と知らせないように）
    */
   async createToday(): Promise<boolean> {
-    if (this.closed || this.creating) {
-      return false;
-    }
-    if (!this.can("create")) {
-      this.deps.notifier.notify(PAST_DAY_MESSAGE);
+    if (this.creating || !this.allowed("create")) {
       return false;
     }
     this.creating = true;
@@ -140,7 +136,7 @@ class Session implements BoardSession {
       return await this.createFile();
     } catch (error) {
       this.deps.onError(error);
-      this.deps.notifier.notify(CREATE_FAILED_MESSAGE);
+      this.notifyUnlessClosed(CREATE_FAILED_MESSAGE);
       return false;
     } finally {
       this.creating = false;
@@ -154,32 +150,47 @@ class Session implements BoardSession {
 
   /** 書き込めたら true */
   private edit(kind: EditKind, op: TimerOp): Promise<boolean> {
-    if (this.closed) {
-      return Promise.resolve(false);
-    }
-    if (!this.can(kind)) {
-      this.deps.notifier.notify(PAST_DAY_MESSAGE);
+    if (!this.allowed(kind)) {
       return Promise.resolve(false);
     }
     this.preview(op);
     return this.writer.write(op);
   }
 
+  /** 閉じていなくて、この日にできる操作か。この日にできない操作なら知らせる（design 8.3） */
+  private allowed(kind: EditKind): boolean {
+    if (this.closed) {
+      return false;
+    }
+    const can = canEdit(kind, this.dayKey, toDayKey(this.deps.clock.now()));
+    if (!can) {
+      this.deps.notifier.notify(PAST_DAY_MESSAGE);
+    }
+    return can;
+  }
+
   /**
    * 直近の過去ファイルを複製して作る。作れたら true。もうあったら上書きせずに知らせ、false。
-   * どちらも作成の変更で読み直すが、もうあったときは変更が来ないこともあるので読み直す
+   * どちらも作成の変更で読み直すが、もうあったときは変更が来ないこともあるので読み直す。
+   * 待っている間に閉じたら、知らせも読み直しもしない
    */
   private async createFile(): Promise<boolean> {
-    const { files, notifier } = this.deps;
+    const { files } = this.deps;
     const previous = latestDayBefore(await files.list(), this.dayKey);
     // 一覧を見てから読むまでに消えた過去ファイルは、ないものとして扱う
     const body = previous === undefined ? "" : ((await files.read(previous)) ?? "");
     const created = await files.create(this.dayKey, carryOver(body, this.dayKey));
     if (!created) {
-      notifier.notify(TODAY_FILE_EXISTS_MESSAGE);
+      this.notifyUnlessClosed(TODAY_FILE_EXISTS_MESSAGE);
       this.reloadUnlessClosed();
     }
     return created;
+  }
+
+  private notifyUnlessClosed(message: string): void {
+    if (!this.closed) {
+      this.deps.notifier.notify(message);
+    }
   }
 
   private reloadUnlessClosed(): void {
@@ -225,9 +236,5 @@ class Session implements BoardSession {
   /** タイマーが変わる操作の後は必ず読み直すので、タイマーはそのつど DayEditor から読めばよい */
   private boardState(doc: DayDocument): BoardState {
     return { kind: "board", ...toBoardView(doc, this.deps.editor.current(), this.dayKey) };
-  }
-
-  private can(kind: EditKind): boolean {
-    return canEdit(kind, this.dayKey, toDayKey(this.deps.clock.now()));
   }
 }

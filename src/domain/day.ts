@@ -62,9 +62,22 @@ export function boardTitle(dayKey: string, today: string): string {
   return dayKey === today ? "今日のボード" : `${monthDay(fromDayKey(dayKey))}のボード`;
 }
 
-/** その日のファイル。TODO・作業ログ・日報は、同じ日付のファイル名でつながる（design 7.1） */
+const DAY_FILE_EXTENSION = ".md";
+
+/** その日のファイル名 `YYYY-MM-DD.md`。TODO・作業ログ・日報は、同じ日付のファイル名でつながる（design 7.1） */
+export function dayFileName(dayKey: string): string {
+  return dayKey + DAY_FILE_EXTENSION;
+}
+
+/** その日のファイル名（`YYYY-MM-DD.md`）なら、その日。ほかの名前とありえない日付は undefined */
+export function dayKeyOfFileName(name: string): string | undefined {
+  const dayKey = name.slice(0, -DAY_FILE_EXTENSION.length);
+  return name.endsWith(DAY_FILE_EXTENSION) && isDayKey(dayKey) ? dayKey : undefined;
+}
+
+/** その日のファイル */
 export function dayFilePath(folder: string, dayKey: string): string {
-  return `${folder}/${dayKey}.md`;
+  return `${folder}/${dayFileName(dayKey)}`;
 }
 
 /** ボードの操作の種類。work は作業時間の追加・修正・削除（M2）、interrupt は計測の「中断」、create は「今日のファイルを作る」（design 7.8） */

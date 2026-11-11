@@ -7,6 +7,51 @@ import { parseWorkEntry, workLines } from "@/domain/document/work-entry";
 
 const today = "2026-11-11";
 
+/** 子の行が深さを変えながら続く TODO ブロックの並び（作業時間の行の下のメモ、メモの下の作業時間の行など） */
+const nestedBlocks = fc
+  .array(
+    fc.tuple(
+      fc.constantFrom("- [ ] a", "- [/] b [est:: 2]", "- [x] c"),
+      fc.array(
+        fc.tuple(
+          fc.constantFrom("  ", "    ", "      ", "        ", "\t", "\t  ", "\t\t"),
+          fc.constantFrom("- 25分 ポモドーロ", "- 3分 中断 割り込み", "メモ", "- 参考"),
+        ),
+      ),
+    ),
+  )
+  .map((blocks) =>
+    blocks
+      .map(([head, children]) =>
+        [head, ...children.map(([indent, text]) => indent + text)].join("\n"),
+      )
+      .join("\n"),
+  );
+
+const indentOf = (text: string) => /^[ \t]*/.exec(text)?.[0] ?? "";
+
+/** text が、作業時間の行 work より深い（字下げが work の字下げで始まり、それより長い） */
+const deeperThan = (text: string, work: string) => {
+  const indent = indentOf(work);
+  return indentOf(text).length > indent.length && text.startsWith(indent);
+};
+
+/**
+ * 複製する子の行（性質の確かめ用に、実装とは別の形で書く）。
+ * 作業時間の行と、ある作業時間の行からそこまでの行がすべてその行より深い行を除く
+ */
+const memosOf = (children: string[]) =>
+  children.filter((text, i) => {
+    const underWork = children
+      .slice(0, i)
+      .some(
+        (work, w) =>
+          parseWorkEntry(work) !== undefined &&
+          children.slice(w + 1, i + 1).every((line) => deeperThan(line, work)),
+      );
+    return parseWorkEntry(text) === undefined && !underWork;
+  });
+
 describe("latestDayBefore：直近の過去ファイル", () => {
   it("今日より前の日付のファイルのうち、いちばん新しい日を選ぶ（週末を挟んでも）", () => {
     const names = ["2026-11-05.md", "2026-11-06.md", "2026-11-02.md"];
@@ -82,7 +127,28 @@ date: 2026-11-11
     - 25分 ポモドーロ
     - 参考：前回の資料
 \t- 12分 中断 チャットでの問い合わせ
-\t  続きは3章から
+    - 10分 手動
+  続きは3章から
+`;
+
+    expect(carryOver(previous, today)).toBe(`---
+date: 2026-11-11
+---
+- [ ] 提案資料の構成を固める [est:: 3]
+    - 参考：前回の資料
+  続きは3章から
+`);
+  });
+
+  it("作業時間の行より深く字下げされた後続の行（作業時間のメモ）も複製しない。メモの下の行は残す", () => {
+    const previous = `- [/] 提案資料の構成を固める [est:: 3]
+    - 25分 ポモドーロ
+        途中で集中が切れた
+          原因はチャット
+    - 参考：前回の資料
+        3章から読む
+\t- 12分 中断 チャットでの問い合わせ
+\t  問い合わせの相手
     - 10分 手動
 `;
 
@@ -91,7 +157,21 @@ date: 2026-11-11
 ---
 - [ ] 提案資料の構成を固める [est:: 3]
     - 参考：前回の資料
-\t  続きは3章から
+        3章から読む
+`);
+  });
+
+  it("作業時間の行の字下げで始まらない行は、その行より深くは数えない", () => {
+    const previous = `- [ ] a
+\t- 12分 中断
+        スペースのメモ
+`;
+
+    expect(carryOver(previous, today)).toBe(`---
+date: 2026-11-11
+---
+- [ ] a
+        スペースのメモ
 `);
   });
 
@@ -135,14 +215,12 @@ date: 2026-11-11
   });
   it("性質：未完了の TODO を元の順番で、名前・見積もり・メモとともに [ ] として持つ", () => {
     fc.assert(
-      fc.property(markdownLike, (previous) => {
+      fc.property(fc.oneof(markdownLike, nestedBlocks), (previous) => {
         const expected = todoBlocks(parseDocument(previous).segments)
           .filter((block) => block.todo.status !== "done")
           .map((block) => ({
             todo: { ...block.todo, status: "todo" },
-            memos: block.children
-              .map((line) => line.text)
-              .filter((text) => parseWorkEntry(text) === undefined),
+            memos: memosOf(block.children.map((line) => line.text)),
           }));
 
         const copied = parseDocument(carryOver(previous, today)).segments.map((segment) =>

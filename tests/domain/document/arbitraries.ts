@@ -9,6 +9,7 @@ export const markdownLike = fc
         fc.constantFrom("---", "events:", "  - 10:00-11:00 定例", "", "  ", "\t", "メモ"),
         fc.constantFrom("- [ ] a", "- [/] b [est:: 2]", "- [x] c [est:: 小]", "- [X] d", "* [ ] e"),
         fc.constantFrom("    - 25分 ポモドーロ", "\t- 3分 中断 割り込み", "  字下げメモ", "\r"),
+        fc.constantFrom("        深いメモ", "\t  タブの深いメモ", "        - 5分 手動"),
         fc.string(),
       ),
       fc.constantFrom("\n", "\r\n", ""),

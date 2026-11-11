@@ -4,7 +4,9 @@ import {
   boardTitle,
   canEdit,
   canOpen,
+  dayFileName,
   dayFilePath,
+  dayKeyOfFileName,
   formatDayLabel,
   isDayKey,
   nextDay,
@@ -143,5 +145,34 @@ describe("dayFilePath（その日のファイル。design 7.1）", () => {
   it("フォルダの YYYY-MM-DD.md。TODO・作業ログ・日報が同じ日付のファイル名でつながる", () => {
     expect(dayFilePath("作業ログ", "2026-11-10")).toBe("作業ログ/2026-11-10.md");
     expect(dayFilePath("TODO", "2026-11-10")).toBe("TODO/2026-11-10.md");
+  });
+});
+
+describe("dayKeyOfFileName（ファイル名からその日）", () => {
+  it("YYYY-MM-DD.md の日付のキー", () => {
+    expect(dayKeyOfFileName("2026-11-10.md")).toBe("2026-11-10");
+  });
+
+  it("YYYY-MM-DD.md でない名前と、ありえない日付は undefined", () => {
+    for (const name of [
+      "2026-11-10.txt",
+      "2026-11-10.js",
+      "2026-11-10.md.bak",
+      "2026-11-10",
+      "x2026-11-10.md",
+      "2026-02-30.md",
+      "メモ.md",
+    ]) {
+      expect(dayKeyOfFileName(name)).toBeUndefined();
+    }
+  });
+
+  it("性質：その日のファイル名から、その日に戻る", () => {
+    fc.assert(
+      fc.property(dayKey, (key) => {
+        expect(dayKeyOfFileName(dayFileName(key))).toBe(key);
+        expect(dayFilePath("TODO", key)).toBe(`TODO/${dayFileName(key)}`);
+      }),
+    );
   });
 });

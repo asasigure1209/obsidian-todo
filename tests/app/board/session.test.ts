@@ -888,6 +888,35 @@ date: 2026-11-05
     expect(notices).toEqual(["過去の日は、作業時間の修正だけができます"]);
   });
 
+  it("作っている途中で閉じたら、もうあっても知らせない", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, previous);
+    const { session, notices } = open(files);
+    await settle();
+    files.beforeCreate = () => {
+      session.close();
+      files.write(today, "- [ ] Claude が作った\n");
+    };
+
+    expect(await session.createToday()).toBe(false);
+
+    expect(notices).toEqual([]);
+  });
+
+  it("作っている途中で閉じたら、作れなくても知らせない（例外は onError に渡す）", async () => {
+    const files = new FakeDayFiles();
+    files.write(yesterday, previous);
+    const { session, notices, errors } = open(files);
+    await settle();
+    files.failNextCreate = true;
+    files.beforeCreate = () => session.close();
+
+    expect(await session.createToday()).toBe(false);
+
+    expect(notices).toEqual([]);
+    expect(errors).toHaveLength(1);
+  });
+
   it("閉じた後は作らない", async () => {
     const files = new FakeDayFiles();
     const { session } = open(files);
