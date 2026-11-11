@@ -1,6 +1,6 @@
 import type { DayDocument } from "@/domain/document/body";
 import { eventLines } from "@/domain/document/events";
-import { HOUR_MINUTES, toPomodoros } from "@/domain/minutes";
+import { DAY_MINUTES, HOUR_MINUTES, toPomodoros } from "@/domain/minutes";
 
 /** 時刻の範囲。どちらも0時からの分数で、end は含まない */
 export interface TimeRange {
@@ -156,7 +156,12 @@ export function minuteOfDay(date: Date): number {
 function toMinutes(hour: string, minute: string): number {
   const h = Number(hour);
   const m = Number(minute);
-  return h < 24 && m < HOUR ? h * HOUR + m : Number.NaN;
+  return h < DAY_MINUTES / HOUR && m < HOUR ? h * HOUR + m : Number.NaN;
+}
+
+/** range がすべて hours の中にあるか（休憩が就業時間の中か） */
+export function within(range: TimeRange, hours: TimeRange): boolean {
+  return range.start >= hours.start && range.end <= hours.end;
 }
 
 /** range のうち within に入る部分。入らなければ undefined */

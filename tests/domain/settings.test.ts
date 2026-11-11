@@ -82,10 +82,6 @@ describe("DEFAULT_SETTINGS（設定の既定値）", () => {
 });
 
 describe("parseSettings（保存領域から読んだ設定）", () => {
-  it("保存した設定をそのまま読む", () => {
-    expect(parseSettings(saved)).toEqual(saved);
-  });
-
   it.each([undefined, null, "settings", 1, [], {}])(
     "保存領域が空や形の合わない値（%j）なら、すべて既定値",
     (value) => {

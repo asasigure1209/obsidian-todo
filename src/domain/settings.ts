@@ -1,10 +1,11 @@
-import { HOUR_MINUTES } from "@/domain/minutes";
+import { DAY_MINUTES } from "@/domain/minutes";
 import {
   DEFAULT_WORKDAY,
   formatClock,
   parseClock,
   type TimeRange,
   type Workday,
+  within,
 } from "@/domain/schedule";
 
 /** 3つのフォルダ（design 7.1）。どれも同じ日付のファイル名でつながる */
@@ -31,8 +32,6 @@ export const DEFAULT_SETTINGS: Settings = {
   workday: DEFAULT_WORKDAY,
   sound: true,
 };
-
-const DAY_MINUTES = 24 * HOUR_MINUTES;
 
 type Fields = Record<string, unknown>;
 
@@ -92,10 +91,6 @@ function isMinute(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0 && (value as number) < DAY_MINUTES;
 }
 
-function within(range: TimeRange, hours: TimeRange): boolean {
-  return range.start >= hours.start && range.end <= hours.end;
-}
-
 /**
  * フォルダ名の入力。前後の空白と / を除く（「TODO/」と「TODO」を同じフォルダとして扱う）。
  * 空になれば読まない（Vault の直下に日付のファイルを散らさない）
@@ -145,16 +140,20 @@ function rangeDraft(range: TimeRange): RangeDraft {
  */
 export function readWorkday(draft: WorkdayDraft): WorkdayCheck {
   const hours = readRange(draft.hours);
-  const open = typeof hours === "string" ? undefined : hours;
+  const open = rangeOf(hours);
   const breaks = draft.breaks.map((item) => readBreak(item, open));
-  const problems = breaks.filter((item) => typeof item === "string");
+  const ranges = breaks.flatMap((item) => rangeOf(item) ?? []);
   const workday =
-    open && problems.length === 0 ? { hours: open, breaks: breaks as TimeRange[] } : undefined;
-  return {
-    workday,
-    hours: typeof hours === "string" ? hours : undefined,
-    breaks: breaks.map((item) => (typeof item === "string" ? item : undefined)),
-  };
+    open && ranges.length === breaks.length ? { hours: open, breaks: ranges } : undefined;
+  return { workday, hours: problemOf(hours), breaks: breaks.map(problemOf) };
+}
+
+function rangeOf(read: TimeRange | TimeProblem): TimeRange | undefined {
+  return typeof read === "string" ? undefined : read;
+}
+
+function problemOf(read: TimeRange | TimeProblem): TimeProblem | undefined {
+  return typeof read === "string" ? read : undefined;
 }
 
 function readBreak(draft: RangeDraft, hours: TimeRange | undefined): TimeRange | TimeProblem {

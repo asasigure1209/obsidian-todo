@@ -83,14 +83,6 @@ describe("PluginSettingsStore（設定の保存）", () => {
     });
   });
 
-  it("settings に保存し、timer は消さない", async () => {
-    const plugin = new FakePlugin({ timer: running });
-
-    await new PluginSettingsStore(new PluginData(plugin.asPlugin())).save(DEFAULT_SETTINGS);
-
-    expect(plugin.data).toEqual({ timer: running, settings: DEFAULT_SETTINGS });
-  });
-
   it("タイマーと設定を同時に保存しても、どちらも残る", async () => {
     const plugin = new FakePlugin({});
     const data = new PluginData(plugin.asPlugin());

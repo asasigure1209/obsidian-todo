@@ -1,6 +1,7 @@
 import { type App, type Plugin, PluginSettingTab, Setting } from "obsidian";
 import { FOLDER_EMPTY_MESSAGE, TIME_PROBLEM_MESSAGES } from "@/app/messages";
 import type { AppSettings } from "@/app/settings";
+import type { Workday } from "@/domain/schedule";
 import {
   type Folders,
   type RangeDraft,
@@ -10,6 +11,12 @@ import {
   type WorkdayDraft,
   workdayDraft,
 } from "@/domain/settings";
+
+/** 時刻の欄。始まりと終わり、それぞれの入力例 */
+const RANGE_FIELDS = [
+  ["start", "9:00"],
+  ["end", "18:00"],
+] as const;
 
 /** 欄の問題を出す・消す */
 type ShowProblem = (message: string | undefined) => void;
@@ -22,15 +29,15 @@ const FOLDER_ROWS: ReadonlyArray<readonly [keyof Folders, string, string]> = [
 
 /**
  * 設定画面（design 7.7）。Obsidian の標準の見た目（Setting）で描く。
- * - 入力するたびに確かめ、正しければすぐに保存して効かせる（AppSettings.update）。フォルダ名だけは打ち終えたときに効かせる
- * - 正しくなければ保存せず、欄の下に問題を出す。直すまでは前の値を使う
+ * - 入力するたびに確かめて欄の下に問題を出し、打ち終えたとき（Enter や欄を離れたとき）に正しければ保存して効かせる。
+ *   打つたびに効かせると、日本語入力の途中や打ちかけの値（「18:00」を直す途中の「1:00」など）でボードを描き直してしまう
+ * - 正しくなければ保存しない。直すまでは前の値を使う
  * - 就業時間と休憩は組み合わせで確かめるので、入力の途中の値（draft）をここで持つ
  */
 export class SettingsTab extends PluginSettingTab {
   private draft: WorkdayDraft = { hours: { start: "", end: "" }, breaks: [] };
   private hoursProblem: ShowProblem = () => {};
   private breakProblems: ShowProblem[] = [];
-  private breaksEl: HTMLElement | undefined;
 
   constructor(
     app: App,
@@ -51,8 +58,7 @@ export class SettingsTab extends PluginSettingTab {
       .setName("休憩")
       .setDesc("集中できる時間から除く。就業時間の中で指定する")
       .setHeading();
-    this.breaksEl = containerEl.createDiv();
-    this.renderBreaks();
+    this.renderBreaks(containerEl.createDiv());
     this.renderSound(containerEl);
   }
 
@@ -61,8 +67,6 @@ export class SettingsTab extends PluginSettingTab {
     for (const [key, name, desc] of FOLDER_ROWS) {
       const setting = new Setting(el).setName(name).setDesc(desc);
       const showProblem = problemLine(setting);
-      // フォルダ名は打ち終えたとき（Enter や欄を離れたとき）に効かせる。打つたびだと、日本語入力の途中や
-      // 打ちかけのフォルダ名でボードを作り直し、タイマーも打ちかけのフォルダで判定してしまう
       setting.addText((text) => {
         text.setValue(this.settings.current().folders[key]);
         text.inputEl.addEventListener("change", () =>
@@ -91,21 +95,15 @@ export class SettingsTab extends PluginSettingTab {
   }
 
   /** 休憩の欄だけを描き直す（追加・削除のとき。ほかの欄の入力の途中の値を消さない） */
-  private renderBreaks(): void {
-    const el = this.breaksEl;
-    if (!el) {
-      return;
-    }
+  private renderBreaks(el: HTMLElement): void {
     el.empty();
     this.breakProblems = this.draft.breaks.map((range, index) =>
       this.renderBreak(el, range, index),
     );
     new Setting(el).addButton((button) =>
-      button.setButtonText("休憩を追加").onClick(() => {
-        this.draft.breaks.push({ start: "", end: "" });
-        this.renderBreaks();
-        this.applyWorkday();
-      }),
+      button
+        .setButtonText("休憩を追加")
+        .onClick(() => this.editBreaks(el, (breaks) => breaks.push({ start: "", end: "" }))),
     );
   }
 
@@ -116,13 +114,16 @@ export class SettingsTab extends PluginSettingTab {
       button
         .setIcon("trash")
         .setTooltip("この休憩を削除")
-        .onClick(() => {
-          this.draft.breaks.splice(index, 1);
-          this.renderBreaks();
-          this.applyWorkday();
-        }),
+        .onClick(() => this.editBreaks(el, (breaks) => breaks.splice(index, 1))),
     );
     return problemLine(setting);
+  }
+
+  /** 休憩を足す・消すと、欄を描き直してすぐに効かせる */
+  private editBreaks(el: HTMLElement, edit: (breaks: RangeDraft[]) => void): void {
+    edit(this.draft.breaks);
+    this.renderBreaks(el);
+    this.applyWorkday();
   }
 
   private renderSound(el: HTMLElement): void {
@@ -139,35 +140,34 @@ export class SettingsTab extends PluginSettingTab {
 
   /** 始まり〜終わりの2つの欄。入力は range（draft の中）に書き、就業時間と休憩をまとめて確かめる */
   private rangeInputs(setting: Setting, range: RangeDraft): void {
-    setting.addText((text) =>
-      text
-        .setPlaceholder("9:00")
-        .setValue(range.start)
-        .onChange((value) => {
-          range.start = value;
-          this.applyWorkday();
-        }),
-    );
-    setting.controlEl.createSpan({ text: "〜" });
-    setting.addText((text) =>
-      text
-        .setPlaceholder("18:00")
-        .setValue(range.end)
-        .onChange((value) => {
-          range.end = value;
-          this.applyWorkday();
-        }),
-    );
+    for (const [key, placeholder] of RANGE_FIELDS) {
+      if (key === "end") {
+        setting.controlEl.createSpan({ text: "〜" });
+      }
+      setting.addText((text) => {
+        text.setPlaceholder(placeholder).setValue(range[key]);
+        text.onChange((value) => {
+          range[key] = value;
+          this.checkWorkday();
+        });
+        text.inputEl.addEventListener("change", () => this.applyWorkday());
+      });
+    }
   }
 
-  /** 問題を欄ごとに出し、どこにも問題がなければ保存する */
-  private applyWorkday(): void {
+  /** 問題を欄ごとに出す。どこにも問題がなければ、読めた就業時間と休憩を返す */
+  private checkWorkday(): Workday | undefined {
     const check = readWorkday(this.draft);
     this.hoursProblem(problemMessage(check.hours));
     for (const [index, show] of this.breakProblems.entries()) {
       show(problemMessage(check.breaks[index]));
     }
-    const workday = check.workday;
+    return check.workday;
+  }
+
+  /** 問題を欄ごとに出し、どこにも問題がなければ保存する */
+  private applyWorkday(): void {
+    const workday = this.checkWorkday();
     if (workday) {
       void this.settings.update((s) => ({ ...s, workday }));
     }
