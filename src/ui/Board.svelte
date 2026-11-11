@@ -3,10 +3,11 @@ import { untrack } from "svelte";
 import type { BoardSession } from "@/app/board/session";
 import type { Readable } from "@/app/store";
 import { type Card, dayProgress } from "@/domain/board";
-import { canEdit, toDayKey } from "@/domain/day";
+import { canEdit, dayFilePath, toDayKey } from "@/domain/day";
 import type { Settings } from "@/domain/settings";
 import Column from "./Column.svelte";
 import Header from "./Header.svelte";
+import Review from "./Review.svelte";
 import type { Drop } from "./sortable";
 import Timeline from "./Timeline.svelte";
 
@@ -28,6 +29,8 @@ interface Props {
   showDay: (dayKey: string) => void;
   /** その日の作業ログを開く */
   openWorkLog: () => void;
+  /** その日の日報を開く（M3） */
+  openDailyReport: () => void;
 }
 
 const {
@@ -40,7 +43,11 @@ const {
   onTodayChange,
   showDay,
   openWorkLog,
+  openDailyReport,
 }: Props = $props();
+
+/** 終業の振り返り（M3）を出しているか。タブの中身を切り替えるだけで、日を切り替えるとボードに戻る（作り直すため） */
+let reviewing = $state(false);
 
 const workday = $derived($settings.workday);
 
@@ -94,8 +101,29 @@ function handleDrop(drop: Drop): void {
 }
 </script>
 
-<div class="board">
-  <Header {dayKey} {progress} {isToday} {showDay} {openWorkLog} />
+{#if reviewing}
+  <Review
+    {dayKey}
+    state={$session}
+    {dayWord}
+    workLogPath={dayFilePath($settings.folders.workLog, dayKey)}
+    dailyReportPath={dayFilePath($settings.folders.dailyReport, dayKey)}
+    back={() => (reviewing = false)}
+    {openWorkLog}
+    {openDailyReport}
+  />
+{/if}
+
+<!-- 振り返りの間はボードを隠すだけ（作り直さない）。振り返りは、その日のファイルを読めた日に出す（過去の日も） -->
+<div class="board" class:hidden={reviewing}>
+  <Header
+    {dayKey}
+    {progress}
+    {isToday}
+    {showDay}
+    {openWorkLog}
+    openReview={$session.kind === "board" ? () => (reviewing = true) : undefined}
+  />
 
   <div class="board-body">
     <aside class="sidebar">
@@ -140,6 +168,11 @@ function handleDrop(drop: Drop): void {
   flex-direction: column;
   height: 100%;
   color: var(--text-normal);
+}
+
+/* 終業の振り返り（M3）を出している間 */
+.board.hidden {
+  display: none;
 }
 
 /* 左にサイドバー、右に3列（モック M1） */

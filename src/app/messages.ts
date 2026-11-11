@@ -17,6 +17,7 @@ export const DISCARDED_MESSAGE =
 export const missingMessage = (dayKey: string) => `${dayKey} のファイルがありません`;
 export const PAST_DAY_MESSAGE = "過去の日は、作業時間の修正だけができます";
 export const WORK_LOG_FAILED_MESSAGE = "作業ログを開けませんでした";
+export const DAILY_REPORT_FAILED_MESSAGE = "日報を開けませんでした";
 export const SETTINGS_SAVE_FAILED_MESSAGE =
   "設定を保存できませんでした。Obsidian を開き直すと、前の設定に戻ります";
 

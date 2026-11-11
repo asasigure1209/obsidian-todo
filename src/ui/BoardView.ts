@@ -1,10 +1,11 @@
 import { type App, ItemView, Modal, type WorkspaceLeaf } from "obsidian";
 import { type Component, mount, unmount } from "svelte";
 import { type BoardDeps, type BoardSession, openBoard } from "@/app/board/session";
-import { WORK_LOG_FAILED_MESSAGE } from "@/app/messages";
+import { DAILY_REPORT_FAILED_MESSAGE, WORK_LOG_FAILED_MESSAGE } from "@/app/messages";
 import type { AppSettings } from "@/app/settings";
 import type { Card } from "@/domain/board";
 import { boardTitle, canOpen, dayFilePath, toDayKey } from "@/domain/day";
+import type { Folders } from "@/domain/settings";
 import AddTodoDialog from "./AddTodoDialog.svelte";
 import Board from "./Board.svelte";
 import WorkDialog from "./WorkDialog.svelte";
@@ -99,20 +100,25 @@ export class BoardView extends ItemView {
             new SvelteModal(this.app, AddTodoDialog, "daily-kanban-todo-add-modal", { session }),
           ),
         showDay: (next: string) => this.showDay(next),
-        openWorkLog: () => this.openWorkLog(dayKey),
+        openWorkLog: () => this.openDayNote("workLog", dayKey, WORK_LOG_FAILED_MESSAGE),
+        // 日報には書き込まない。開くだけ（design 7.7）
+        openDailyReport: () => this.openDayNote("dailyReport", dayKey, DAILY_REPORT_FAILED_MESSAGE),
       },
     });
     this.dayKey = dayKey;
     this.refreshTitle();
   }
 
-  /** ファイルがなければ、ほかのリンクと同じく Obsidian が作る。開けなければ知らせる */
-  private openWorkLog(dayKey: string): void {
+  /**
+   * その日の作業ログ・日報を開く。フォルダは開くときに今の設定から読む（AD-11）。
+   * ファイルがなければ、ほかのリンクと同じく Obsidian が作る。開けなければ知らせる
+   */
+  private openDayNote(folder: keyof Folders, dayKey: string, failure: string): void {
     this.app.workspace
-      .openLinkText(dayFilePath(this.settings.current().folders.workLog, dayKey), "", false)
+      .openLinkText(dayFilePath(this.settings.current().folders[folder], dayKey), "", false)
       .catch((error: unknown) => {
         this.deps.onError(error);
-        this.deps.notifier.notify(WORK_LOG_FAILED_MESSAGE);
+        this.deps.notifier.notify(failure);
       });
   }
 
