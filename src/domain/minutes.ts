@@ -13,9 +13,14 @@ export function recordableMinutes(startedAt: number, now: number): number {
   return Math.min(Math.max(elapsed, 0), POMODORO_MINUTES);
 }
 
-/** 分数をポモドーロに換算する（M2 の合計）。小数1桁に四捨五入 */
+/** 小数1桁に四捨五入する。引き算の誤差（2.3 − 1 = 1.2999…）もここで消す */
+export function roundTenths(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/** 分数をポモドーロに換算する（M2 の合計、M3 の実績）。小数1桁に四捨五入 */
 export function pomodoroEquivalent(minutes: number): number {
-  return Math.round((minutes / POMODORO_MINUTES) * 10) / 10;
+  return roundTenths(minutes / POMODORO_MINUTES);
 }
 
 /** 分数がポモドーロ何個分か。25分で割って切り捨てる（多めに出さない） */

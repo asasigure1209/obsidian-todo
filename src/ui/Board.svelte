@@ -1,12 +1,13 @@
 <script lang="ts">
-import { untrack } from "svelte";
+import { tick, untrack } from "svelte";
 import type { BoardSession } from "@/app/board/session";
 import type { Readable } from "@/app/store";
 import { type Card, dayProgress } from "@/domain/board";
-import { canEdit, toDayKey } from "@/domain/day";
+import { canEdit, dayFilePath, toDayKey } from "@/domain/day";
 import type { Settings } from "@/domain/settings";
 import Column from "./Column.svelte";
 import Header from "./Header.svelte";
+import Review from "./Review.svelte";
 import type { Drop } from "./sortable";
 import Timeline from "./Timeline.svelte";
 
@@ -26,8 +27,9 @@ interface Props {
   onTodayChange: () => void;
   /** 表示する日を切り替える（ヘッダーの「前の日」「次の日」） */
   showDay: (dayKey: string) => void;
-  /** その日の作業ログを開く */
-  openWorkLog: () => void;
+  /** そのパスの作業ログ・日報（M3）を開く。パスは Board が今の設定から組み立てる */
+  openWorkLog: (path: string) => void;
+  openDailyReport: (path: string) => void;
 }
 
 const {
@@ -40,7 +42,23 @@ const {
   onTodayChange,
   showDay,
   openWorkLog,
+  openDailyReport,
 }: Props = $props();
+
+/** 終業の振り返り（M3）を出しているか。タブの中身を切り替えるだけで、日を切り替えるとボードに戻る（作り直すため） */
+let reviewing = $state(false);
+let header: ReturnType<typeof Header> | undefined = $state();
+
+/** 戻ったら「終業の振り返り」にフォーカスを戻す。ボードを出し直してから */
+async function closeReview(): Promise<void> {
+  reviewing = false;
+  await tick();
+  header?.focusReview();
+}
+
+/** 作業ログと日報のパス。表示と開く処理の両方で使う。フォルダは今の設定から（AD-11） */
+const workLogPath = $derived(dayFilePath($settings.folders.workLog, dayKey));
+const dailyReportPath = $derived(dayFilePath($settings.folders.dailyReport, dayKey));
 
 const workday = $derived($settings.workday);
 
@@ -94,8 +112,30 @@ function handleDrop(drop: Drop): void {
 }
 </script>
 
-<div class="board">
-  <Header {dayKey} {progress} {isToday} {showDay} {openWorkLog} />
+{#if reviewing}
+  <Review
+    {dayKey}
+    view={$session}
+    {isToday}
+    {workLogPath}
+    {dailyReportPath}
+    back={() => void closeReview()}
+    {openWorkLog}
+    {openDailyReport}
+  />
+{/if}
+
+<!-- 振り返りの間はボードを隠すだけ（作り直さない）。振り返りは、その日のファイルを読めた日に出す（過去の日も） -->
+<div class="board" class:hidden={reviewing}>
+  <Header
+    bind:this={header}
+    {dayKey}
+    {progress}
+    {isToday}
+    {showDay}
+    openWorkLog={() => openWorkLog(workLogPath)}
+    openReview={$session.kind === "board" ? () => (reviewing = true) : undefined}
+  />
 
   <div class="board-body">
     <aside class="sidebar">
@@ -141,6 +181,11 @@ function handleDrop(drop: Drop): void {
   flex-direction: column;
   height: 100%;
   color: var(--text-normal);
+}
+
+/* 終業の振り返り（M3）を出している間 */
+.board.hidden {
+  display: none;
 }
 
 /* 左にサイドバー、右に3列（モック M1） */

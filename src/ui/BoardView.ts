@@ -1,10 +1,10 @@
 import { type App, ItemView, Modal, type WorkspaceLeaf } from "obsidian";
 import { type Component, mount, unmount } from "svelte";
 import { type BoardDeps, type BoardSession, openBoard } from "@/app/board/session";
-import { WORK_LOG_FAILED_MESSAGE } from "@/app/messages";
+import { DAILY_REPORT_FAILED_MESSAGE, WORK_LOG_FAILED_MESSAGE } from "@/app/messages";
 import type { AppSettings } from "@/app/settings";
 import type { Card } from "@/domain/board";
-import { boardTitle, canOpen, dayFilePath, toDayKey } from "@/domain/day";
+import { boardTitle, canOpen, toDayKey } from "@/domain/day";
 import AddTodoDialog from "./AddTodoDialog.svelte";
 import Board from "./Board.svelte";
 import WorkDialog from "./WorkDialog.svelte";
@@ -22,7 +22,7 @@ export class BoardView extends ItemView {
   constructor(
     leaf: WorkspaceLeaf,
     private readonly deps: BoardDeps,
-    /** フォルダ（design 7.1）と就業時間・休憩（design 8.2）。ボードと作業ログのリンクが読む */
+    /** フォルダ（design 7.1）と就業時間・休憩（design 8.2）。ボードが読み、作業ログ・日報のパスもボードが組み立てる */
     private readonly settings: AppSettings,
   ) {
     super(leaf);
@@ -99,21 +99,24 @@ export class BoardView extends ItemView {
             new SvelteModal(this.app, AddTodoDialog, "daily-kanban-todo-add-modal", { session }),
           ),
         showDay: (next: string) => this.showDay(next),
-        openWorkLog: () => this.openWorkLog(dayKey),
+        openWorkLog: (path: string) => this.openNote(path, WORK_LOG_FAILED_MESSAGE),
+        // 日報には書き込まない。開くだけ（design 7.7）
+        openDailyReport: (path: string) => this.openNote(path, DAILY_REPORT_FAILED_MESSAGE),
       },
     });
     this.dayKey = dayKey;
     this.refreshTitle();
   }
 
-  /** ファイルがなければ、ほかのリンクと同じく Obsidian が作る。開けなければ知らせる */
-  private openWorkLog(dayKey: string): void {
-    this.app.workspace
-      .openLinkText(dayFilePath(this.settings.current().folders.workLog, dayKey), "", false)
-      .catch((error: unknown) => {
-        this.deps.onError(error);
-        this.deps.notifier.notify(WORK_LOG_FAILED_MESSAGE);
-      });
+  /**
+   * 作業ログ・日報を開く。パスは Board が今の設定のフォルダから組み立て、表示にも同じものを使う（AD-11）。
+   * ファイルがなければ、ほかのリンクと同じく Obsidian が作る。開けなければ知らせる
+   */
+  private openNote(path: string, failure: string): void {
+    this.app.workspace.openLinkText(path, "", false).catch((error: unknown) => {
+      this.deps.onError(error);
+      this.deps.notifier.notify(failure);
+    });
   }
 
   /** タブの見出しを読み直させる。updateHeader は公開の型にないので、ない版では何もしない */

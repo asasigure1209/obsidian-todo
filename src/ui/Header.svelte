@@ -12,9 +12,18 @@ interface Props {
   openWorkLog: () => void;
   /** 今日のボードか。今日より先へは進めないので「次の日」を押せなくする（design 8.3）。日付をまたぐと Board が切り替える */
   isToday: boolean;
+  /** 終業の振り返り（M3）に切り替える。その日のファイルを読めた日だけ渡す（過去の日も） */
+  openReview: (() => void) | undefined;
 }
 
-const { dayKey, progress, showDay, openWorkLog, isToday }: Props = $props();
+const { dayKey, progress, showDay, openWorkLog, isToday, openReview }: Props = $props();
+
+let reviewButton: HTMLButtonElement | undefined = $state();
+
+/** 振り返りから戻ったときに Board が呼ぶ。ボタンが出ていなければ何もしない */
+export function focusReview(): void {
+  reviewButton?.focus();
+}
 </script>
 
 {#snippet dayNav(label: string, arrow: string, target: string, disabled: boolean)}
@@ -40,7 +49,7 @@ const { dayKey, progress, showDay, openWorkLog, isToday }: Props = $props();
   </button>
 {/snippet}
 
-<!-- モック M1 のヘッダー。「終業の振り返り」は M3 ができるまで出さない -->
+<!-- モック M1 のヘッダー -->
 <header class="header">
   <div class="day">
     {@render dayNav("前の日", "M15 6l-6 6 6 6", previousDay(dayKey), false)}
@@ -78,6 +87,12 @@ const { dayKey, progress, showDay, openWorkLog, isToday }: Props = $props();
   >
     作業ログ {dayKey}
   </a>
+
+  {#if openReview}
+    <button type="button" class="review" bind:this={reviewButton} onclick={openReview}>
+      終業の振り返り
+    </button>
+  {/if}
 </header>
 
 <style>
@@ -160,5 +175,18 @@ const { dayKey, progress, showDay, openWorkLog, isToday }: Props = $props();
 
 .work-log:hover {
   text-decoration: underline;
+}
+
+/* 主ボタン。明暗を反転させる（design 5章「テーマ」） */
+.review {
+  height: auto;
+  padding: 12px 18px;
+  border: none;
+  border-radius: var(--radius-m);
+  background-color: var(--text-normal);
+  box-shadow: none;
+  color: var(--background-primary);
+  font-size: 15px;
+  font-weight: var(--font-medium);
 }
 </style>
