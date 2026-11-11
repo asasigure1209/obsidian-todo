@@ -1,20 +1,27 @@
 <script lang="ts">
 import { untrack } from "svelte";
 import type { BoardSession } from "@/app/board/session";
+import { CUSTOM_PROBLEM_MESSAGES } from "@/app/messages";
 import type { Card } from "@/domain/board";
 import type { WorkKind } from "@/domain/document/work-entry";
 import { POMODORO_MINUTES, pomodoroEquivalent } from "@/domain/minutes";
 import {
   addMinutes,
   canSave,
+  clearEntered,
+  customProblem,
   type DraftRow,
   draftTotal,
+  EMPTY_CUSTOM,
+  enterCustom,
   hasEdits,
   openDraft,
   removeRow,
   rowKind,
   setMinutes,
   toEdits,
+  typeCustom,
+  type WorkDraft,
 } from "@/domain/work-draft";
 
 interface Props {
@@ -40,7 +47,10 @@ const KIND_LABELS: Record<WorkKind, string> = {
 // 開いたときの記録から下書きを作る。保存するまでファイルの変化は取り込まない
 let draft = $state(openDraft(untrack(() => card.entries)));
 let saving = $state(false);
+// 任意の欄。値が残っている間は保存させない（Enter を押し忘れた分を黙って捨てない）
+let custom = $state(EMPTY_CUSTOM);
 const total = $derived(draftTotal(draft));
+const problem = $derived(customProblem(custom));
 
 /** 種類の下に出す補足。kind は保存したときの種類（分数を変えた行は手動になる） */
 function note(row: DraftRow, kind: WorkKind): string {
@@ -54,13 +64,28 @@ function note(row: DraftRow, kind: WorkKind): string {
   return memo ?? "手動で修正";
 }
 
+/** 下書きを変える操作（追加・削除・分数の変更）。空欄で Enter を押したときの問題は古くなるので消す */
+function editDraft(next: WorkDraft): void {
+  draft = next;
+  custom = clearEntered(custom);
+}
+
+/** 数として読めない値（「1e」など）は value が空になるので、badInput で欄に値があると分かる */
+function typeInCustom(event: Event & { currentTarget: HTMLInputElement }): void {
+  const input = event.currentTarget;
+  custom = typeCustom(input.value !== "" || input.validity.badInput, input.valueAsNumber);
+}
+
+/** Enter で足す。足せたときだけ欄を空にし、足せなければ値を残して欄の下に問題を出す */
 function addCustom(event: KeyboardEvent & { currentTarget: HTMLInputElement }): void {
   if (event.key !== "Enter") {
     return;
   }
   event.preventDefault();
-  draft = addMinutes(draft, event.currentTarget.valueAsNumber);
-  event.currentTarget.value = "";
+  ({ draft, custom } = enterCustom(draft, custom));
+  if (!custom.filled) {
+    event.currentTarget.value = "";
+  }
 }
 
 /** 保存できたら閉じる。断られたら（通知が出る）下書きを残して開いたままにする。変更がなければ書かずに閉じる */
@@ -101,7 +126,7 @@ async function save(): Promise<void> {
             aria-label="作業した分数"
             value={Number.isNaN(row.minutes) ? "" : row.minutes}
             oninput={(event) => {
-              draft = setMinutes(draft, row.key, event.currentTarget.valueAsNumber);
+              editDraft(setMinutes(draft, row.key, event.currentTarget.valueAsNumber));
             }}
           >
           <span class="unit">分</span>
@@ -115,7 +140,7 @@ async function save(): Promise<void> {
           class="clickable-icon remove"
           aria-label="この記録を削除"
           onclick={() => {
-            draft = removeRow(draft, row.key);
+            editDraft(removeRow(draft, row.key));
           }}
         >
           <svg
@@ -143,7 +168,7 @@ async function save(): Promise<void> {
           type="button"
           class="quick"
           onclick={() => {
-            draft = addMinutes(draft, minutes);
+            editDraft(addMinutes(draft, minutes));
           }}
         >
           {label}
@@ -151,9 +176,27 @@ async function save(): Promise<void> {
       {/each}
       <div class="custom">
         <label for="work-dialog-custom">任意</label>
-        <input id="work-dialog-custom" type="number" min="1" placeholder="分" onkeydown={addCustom}>
+        <input
+          id="work-dialog-custom"
+          type="number"
+          min="1"
+          placeholder="分"
+          aria-describedby="work-dialog-custom-problem"
+          aria-invalid={problem === "invalid"}
+          oninput={typeInCustom}
+          onkeydown={addCustom}
+        >
       </div>
     </div>
+    <!-- 読み上げのため要素は常に置き、中身だけを切り替える -->
+    <p
+      id="work-dialog-custom-problem"
+      class="custom-problem"
+      class:shown={problem !== undefined}
+      aria-live="polite"
+    >
+      {problem ? CUSTOM_PROBLEM_MESSAGES[problem] : ""}
+    </p>
   </div>
 
   <div class="total">
@@ -170,7 +213,7 @@ async function save(): Promise<void> {
       <button
         type="button"
         class="mod-cta"
-        disabled={!canSave(draft) || saving}
+        disabled={!canSave(draft, custom) || saving}
         onclick={() => void save()}
       >
         保存
@@ -316,6 +359,19 @@ async function save(): Promise<void> {
   width: 80px;
   height: 44px;
   text-align: right;
+}
+
+/* 任意の欄の問題。設定画面の問題（styles.css）と同じ色で、欄の下に右寄せで出す。
+   問題がないときは .add の gap を打ち消して高さを取らない */
+.custom-problem {
+  margin: calc(-1 * var(--size-4-3)) 0 0;
+  color: var(--text-error);
+  font-size: var(--font-ui-smaller);
+  text-align: right;
+}
+
+.custom-problem.shown {
+  margin-top: calc(-1 * var(--size-4-1));
 }
 
 .total {
