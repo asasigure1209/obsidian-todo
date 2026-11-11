@@ -1,7 +1,8 @@
-import type { Plugin } from "obsidian";
 import { describe, expect, it } from "vitest";
+import { PluginData } from "@/adapters/plugin-data";
 import { PluginTimerStore } from "@/adapters/timer-store";
 import type { RunningTimer } from "@/domain/timer";
+import { FakePlugin } from "./fakes/plugin";
 
 const running = (): RunningTimer => ({
   dayKey: "2026-11-05",
@@ -12,8 +13,7 @@ const running = (): RunningTimer => ({
 
 /** 保存領域（data.json）の中身だけを持つ偽物 */
 function storeWith(data: unknown): PluginTimerStore {
-  const plugin = { loadData: async () => data, saveData: async () => {} };
-  return new PluginTimerStore(plugin as unknown as Plugin);
+  return new PluginTimerStore(new PluginData(new FakePlugin(data).asPlugin()));
 }
 
 describe("PluginTimerStore.load（保存領域から読んだ値）", () => {

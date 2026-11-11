@@ -16,22 +16,28 @@ const BEEP_SECONDS = 0.6;
  * 25分の満了の知らせ。Obsidian が背面にあっても気づけるよう、次の3つで知らせる（design 8.1）
  * - クリックするまで消えない Obsidian 内の通知
  * - OS の通知（macOS の通知センターなど）
- * - 短い音
+ * - 短い音。設定でオフにできる。オフでも、通知の2つは出す
+ *
+ * 音の有無は、鳴らすときに今の設定から読む（設定を変えたらすぐに効く）
  */
-export const expiryAlarm: Alarm = {
-  ring: (message) => {
-    // 表示の時間を 0 にすると、クリックするまで消えない
-    new Notice(message, 0);
-    showSystemNotification(message);
-    beep();
-  },
-  prepare: () => {
-    // 満了のときは本人が画面を見ていないことが多いので、計測を始めたときに許可を尋ねておく
-    if (notificationPermission() === "default") {
-      void Notification.requestPermission();
-    }
-  },
-};
+export function expiryAlarm(sound: () => boolean): Alarm {
+  return {
+    ring: (message) => {
+      // 表示の時間を 0 にすると、クリックするまで消えない
+      new Notice(message, 0);
+      showSystemNotification(message);
+      if (sound()) {
+        beep();
+      }
+    },
+    prepare: () => {
+      // 満了のときは本人が画面を見ていないことが多いので、計測を始めたときに許可を尋ねておく
+      if (notificationPermission() === "default") {
+        void Notification.requestPermission();
+      }
+    },
+  };
+}
 
 /** OS の通知の許可。通知が使えない環境では undefined */
 function notificationPermission(): NotificationPermission | undefined {

@@ -1,6 +1,6 @@
 import type { DayDocument } from "@/domain/document/body";
 import { eventLines } from "@/domain/document/events";
-import { HOUR_MINUTES, toPomodoros } from "@/domain/minutes";
+import { DAY_MINUTES, HOUR_MINUTES, toPomodoros } from "@/domain/minutes";
 
 /** 時刻の範囲。どちらも0時からの分数で、end は含まない */
 export interface TimeRange {
@@ -19,7 +19,7 @@ export interface Workday {
   breaks: TimeRange[];
 }
 
-/** 設定画面ができるまでの既定値。9:00〜18:00、休憩 12:00〜13:00 */
+/** 設定の既定値。9:00〜18:00、休憩 12:00〜13:00（design 8.2） */
 export const DEFAULT_WORKDAY: Workday = {
   hours: { start: 9 * HOUR_MINUTES, end: 18 * HOUR_MINUTES },
   breaks: [{ start: 12 * HOUR_MINUTES, end: 13 * HOUR_MINUTES }],
@@ -131,6 +131,22 @@ export function formatClock(minutes: number): string {
   return `${Math.floor(minutes / HOUR)}:${String(minutes % HOUR).padStart(2, "0")}`;
 }
 
+const CLOCK = /^(\d{1,2}):(\d{2})$/;
+
+/**
+ * 設定の時刻の入力（「9:00」「09:00」）を0時からの分数に。読めなければ undefined。
+ * 日本語入力のまま打った全角の数字とコロン（「９：００」）も読む
+ */
+export function parseClock(text: string): number | undefined {
+  const match = CLOCK.exec(text.normalize("NFKC").trim());
+  if (!match) {
+    return undefined;
+  }
+  const [, hour = "", minute = ""] = match;
+  const minutes = toMinutes(hour, minute);
+  return Number.isNaN(minutes) ? undefined : minutes;
+}
+
 /** 0時からの分数 */
 export function minuteOfDay(date: Date): number {
   return date.getHours() * HOUR + date.getMinutes();
@@ -140,7 +156,12 @@ export function minuteOfDay(date: Date): number {
 function toMinutes(hour: string, minute: string): number {
   const h = Number(hour);
   const m = Number(minute);
-  return h < 24 && m < HOUR ? h * HOUR + m : Number.NaN;
+  return h < DAY_MINUTES / HOUR && m < HOUR ? h * HOUR + m : Number.NaN;
+}
+
+/** range がすべて hours の中にあるか（休憩が就業時間の中か） */
+export function within(range: TimeRange, hours: TimeRange): boolean {
+  return range.start >= hours.start && range.end <= hours.end;
 }
 
 /** range のうち within に入る部分。入らなければ undefined */

@@ -12,6 +12,7 @@ import {
   hourMarks,
   minuteOfDay,
   nowOffset,
+  parseClock,
   parseEvent,
   type ScheduledEvent,
   scheduledEvents,
@@ -33,7 +34,7 @@ const workday: Workday = {
 };
 
 describe("DEFAULT_WORKDAY", () => {
-  it("設定画面ができるまでは 9:00〜18:00、休憩 12:00〜13:00", () => {
+  it("既定値は 9:00〜18:00、休憩 12:00〜13:00", () => {
     expect(DEFAULT_WORKDAY).toEqual(workday);
   });
 });
@@ -168,6 +169,46 @@ describe("formatClock", () => {
     expect(formatClock(at(9, 5))).toBe("9:05");
     expect(formatClock(at(13, 30))).toBe("13:30");
     expect(formatClock(0)).toBe("0:00");
+  });
+});
+
+describe("parseClock（設定の時刻の入力）", () => {
+  it("「時:分」を0時からの分数にする。時は1桁でも2桁でもよい", () => {
+    expect(parseClock("9:00")).toBe(at(9));
+    expect(parseClock("09:05")).toBe(at(9, 5));
+    expect(parseClock("0:00")).toBe(0);
+    expect(parseClock("23:59")).toBe(at(23, 59));
+  });
+
+  it("前後の空白と全角の数字・コロンを受け付ける", () => {
+    expect(parseClock(" 18:30 ")).toBe(at(18, 30));
+    expect(parseClock("１２：００")).toBe(at(12));
+  });
+
+  it.each([
+    "",
+    "9",
+    "9:0",
+    "9:000",
+    "900",
+    "9.00",
+    "-1:00",
+    "24:00",
+    "12:60",
+    "123:00",
+    "9:00x",
+    "x9:00",
+    "9:00-10:00",
+  ])("書式に合わない入力とありえない時刻（%j）は読まない", (text) => {
+    expect(parseClock(text)).toBeUndefined();
+  });
+
+  it("formatClock で書いた時刻は、読むと元の分数に戻る", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: at(23, 59) }), (minutes) => {
+        expect(parseClock(formatClock(minutes))).toBe(minutes);
+      }),
+    );
   });
 });
 

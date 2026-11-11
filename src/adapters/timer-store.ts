@@ -1,19 +1,17 @@
-import type { Plugin } from "obsidian";
+import type { PluginData } from "@/adapters/plugin-data";
 import type { RunningTimer, Timer } from "@/domain/timer";
 import type { TimerStore } from "@/domain/timer-store";
 
-/** プラグインの保存領域（data.json）の timer に置く。ほかの項目（今後の設定）は消さない */
+/** プラグインの保存領域（data.json）の timer に置く。ほかの項目（settings）は消さない（adapters/plugin-data.ts） */
 export class PluginTimerStore implements TimerStore {
-  constructor(private readonly plugin: Plugin) {}
+  constructor(private readonly data: PluginData) {}
 
   async load(): Promise<Timer> {
-    const data = await this.plugin.loadData();
-    return parseTimer(data?.timer);
+    return parseTimer(await this.data.read("timer"));
   }
 
-  async save(timer: Timer): Promise<void> {
-    const data = (await this.plugin.loadData()) ?? {};
-    await this.plugin.saveData({ ...data, timer: timer ?? null });
+  save(timer: Timer): Promise<void> {
+    return this.data.write("timer", timer ?? null);
   }
 }
 

@@ -2,9 +2,9 @@ import { type App, ItemView, Modal, type WorkspaceLeaf } from "obsidian";
 import { type Component, mount, unmount } from "svelte";
 import { type BoardDeps, type BoardSession, openBoard } from "@/app/board/session";
 import { WORK_LOG_FAILED_MESSAGE } from "@/app/messages";
+import type { AppSettings } from "@/app/settings";
 import type { Card } from "@/domain/board";
 import { boardTitle, canOpen, dayFilePath, toDayKey } from "@/domain/day";
-import { DEFAULT_WORKDAY } from "@/domain/schedule";
 import AddTodoDialog from "./AddTodoDialog.svelte";
 import Board from "./Board.svelte";
 import WorkDialog from "./WorkDialog.svelte";
@@ -22,8 +22,8 @@ export class BoardView extends ItemView {
   constructor(
     leaf: WorkspaceLeaf,
     private readonly deps: BoardDeps,
-    /** 作業ログのフォルダ（design 7.1） */
-    private readonly workLogFolder: string,
+    /** フォルダ（design 7.1）と就業時間・休憩（design 8.2）。ボードと作業ログのリンクが読む */
+    private readonly settings: AppSettings,
   ) {
     super(leaf);
   }
@@ -88,8 +88,9 @@ export class BoardView extends ItemView {
               card,
             }),
           ),
-        // 設定画面ができたら、ここを設定の値に替える（design 8.2）
-        workday: DEFAULT_WORKDAY,
+        // 就業時間と休憩はボードが設定から読む。変えてもボードを作り直さない（開いているダイアログも閉じない）。
+        // TODO のフォルダの変更は VaultDayFiles がファイルの変更として知らせ、session が読み直す
+        settings: this.settings,
         now: () => this.deps.clock.now(),
         // 日付をまたいで「今日」が変わったら、タブの見出し（今日のボード／M月D日のボード）を読み直させる
         onTodayChange: () => this.refreshTitle(),
@@ -108,7 +109,7 @@ export class BoardView extends ItemView {
   /** ファイルがなければ、ほかのリンクと同じく Obsidian が作る。開けなければ知らせる */
   private openWorkLog(dayKey: string): void {
     this.app.workspace
-      .openLinkText(dayFilePath(this.workLogFolder, dayKey), "", false)
+      .openLinkText(dayFilePath(this.settings.current().folders.workLog, dayKey), "", false)
       .catch((error: unknown) => {
         this.deps.onError(error);
         this.deps.notifier.notify(WORK_LOG_FAILED_MESSAGE);

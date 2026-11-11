@@ -1,9 +1,10 @@
 <script lang="ts">
 import { untrack } from "svelte";
 import type { BoardSession } from "@/app/board/session";
+import type { Readable } from "@/app/store";
 import { type Card, dayProgress } from "@/domain/board";
 import { canEdit, toDayKey } from "@/domain/day";
-import type { Workday } from "@/domain/schedule";
+import type { Settings } from "@/domain/settings";
 import Column from "./Column.svelte";
 import Header from "./Header.svelte";
 import type { Drop } from "./sortable";
@@ -17,8 +18,8 @@ interface Props {
   openWork: (card: Card) => void;
   /** M4 のダイアログを開く */
   openAdd: () => void;
-  /** 就業時間と休憩（design 8.2） */
-  workday: Workday;
+  /** 設定。就業時間と休憩（design 8.2）を読み、変わったらその場で描き直す */
+  settings: Readable<Settings>;
   /** 現在時刻の取得元。BoardView が持つ時計 */
   now: () => Date;
   /** 日付をまたいで今日が変わったとき（タブの見出しを読み直す） */
@@ -34,12 +35,14 @@ const {
   session,
   openWork,
   openAdd,
-  workday,
+  settings,
   now: readNow,
   onTodayChange,
   showDay,
   openWorkLog,
 }: Props = $props();
+
+const workday = $derived($settings.workday);
 
 /**
  * 表示のための現在時刻。ボードの中でここだけが毎秒読み、ヘッダーとタイムラインに渡す。

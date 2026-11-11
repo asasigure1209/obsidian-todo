@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 // 層ごとの override が共通の `../` 禁止を書き忘れると、その層だけ境界の検査が黙って外れるので、ここで守る。
 
 interface RestrictedImports {
-  options: { patterns: { group: string[] }[] };
+  options: { patterns: { group: string[] }[]; paths?: Record<string, string> };
 }
 interface Override {
   includes: string[];
@@ -36,5 +36,17 @@ describe("biome.json の層の境界", () => {
       .map((entry) => `src/${entry.name}/**`);
     const covered = layerOverrides.flatMap((o) => o.includes);
     expect(covered).toEqual(expect.arrayContaining(layers));
+  });
+
+  it("ui/ で obsidian を使えるのは、Obsidian との境目の BoardView.ts と SettingsTab.ts だけ", () => {
+    const uiFiles = readdirSync("src/ui").map((name) => `src/ui/${name}`);
+    // 後の override ほど優先される（options を置き換える）ので、そのファイルに当たる最後の override で決まる
+    const allowed = uiFiles.filter((file) => {
+      const matching = layerOverrides.filter((o) =>
+        o.includes.some((glob) => glob === file || glob === "src/ui/**"),
+      );
+      return !matching.at(-1)?.linter?.rules?.style?.noRestrictedImports?.options.paths?.obsidian;
+    });
+    expect(allowed.sort()).toEqual(["src/ui/BoardView.ts", "src/ui/SettingsTab.ts"]);
   });
 });
