@@ -63,8 +63,47 @@ export function draftTotal(draft: WorkDraft): number {
   return draft.rows.reduce((sum, row) => sum + (isWorkMinutes(row.minutes) ? row.minutes : 0), 0);
 }
 
-export function canSave(draft: WorkDraft): boolean {
-  return draft.rows.every((row) => isWorkMinutes(row.minutes));
+/**
+ * 任意の分数の欄。filled は欄に何か入っているか（数として読めない値も含む）。minutes は読めなければ NaN。
+ * entered は Enter を押したが足せなかったことで、打ち直すまで問題を出し続ける（空欄で Enter を押したとき）
+ */
+export interface CustomField {
+  filled: boolean;
+  minutes: number;
+  entered: boolean;
+}
+
+/** 欄の下に出す問題。invalid は足せない値、pending は足せるがまだ Enter を押していない値 */
+export type CustomProblem = "invalid" | "pending";
+
+export const EMPTY_CUSTOM: CustomField = { filled: false, minutes: Number.NaN, entered: false };
+
+/** 欄に打ったとき。前に Enter で出した問題は打ち直したので消す */
+export function typeCustom(filled: boolean, minutes: number): CustomField {
+  return { filled, minutes, entered: false };
+}
+
+/** 任意の欄で Enter。足せれば手動の行を足して欄を空にし、足せなければ下書きを変えず欄の値を残す */
+export function enterCustom(
+  draft: WorkDraft,
+  custom: CustomField,
+): { draft: WorkDraft; custom: CustomField } {
+  if (custom.filled && isWorkMinutes(custom.minutes)) {
+    return { draft: addMinutes(draft, custom.minutes), custom: EMPTY_CUSTOM };
+  }
+  return { draft, custom: { ...custom, entered: true } };
+}
+
+export function customProblem(custom: CustomField): CustomProblem | undefined {
+  if (!custom.filled) {
+    return custom.entered ? "invalid" : undefined;
+  }
+  return isWorkMinutes(custom.minutes) ? "pending" : "invalid";
+}
+
+/** 0分や空欄の行があるか、任意の欄に値が残っていれば保存できない（入れたつもりの分を黙って捨てない） */
+export function canSave(draft: WorkDraft, custom: CustomField): boolean {
+  return !custom.filled && draft.rows.every((row) => isWorkMinutes(row.minutes));
 }
 
 export function toEdits(draft: WorkDraft): WorkEdits {

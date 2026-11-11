@@ -1,20 +1,25 @@
 <script lang="ts">
 import { untrack } from "svelte";
 import type { BoardSession } from "@/app/board/session";
+import { CUSTOM_PROBLEM_MESSAGES } from "@/app/messages";
 import type { Card } from "@/domain/board";
 import type { WorkKind } from "@/domain/document/work-entry";
 import { POMODORO_MINUTES, pomodoroEquivalent } from "@/domain/minutes";
 import {
   addMinutes,
   canSave,
+  customProblem,
   type DraftRow,
   draftTotal,
+  EMPTY_CUSTOM,
+  enterCustom,
   hasEdits,
   openDraft,
   removeRow,
   rowKind,
   setMinutes,
   toEdits,
+  typeCustom,
 } from "@/domain/work-draft";
 
 interface Props {
@@ -40,7 +45,10 @@ const KIND_LABELS: Record<WorkKind, string> = {
 // 開いたときの記録から下書きを作る。保存するまでファイルの変化は取り込まない
 let draft = $state(openDraft(untrack(() => card.entries)));
 let saving = $state(false);
+// 任意の欄。値が残っている間は保存させない（Enter を押し忘れた分を黙って捨てない）
+let custom = $state(EMPTY_CUSTOM);
 const total = $derived(draftTotal(draft));
+const problem = $derived(customProblem(custom));
 
 /** 種類の下に出す補足。kind は保存したときの種類（分数を変えた行は手動になる） */
 function note(row: DraftRow, kind: WorkKind): string {
@@ -54,13 +62,22 @@ function note(row: DraftRow, kind: WorkKind): string {
   return memo ?? "手動で修正";
 }
 
+/** 数として読めない値（「1e」など）は value が空になるので、badInput で欄に値があると分かる */
+function typeInCustom(event: Event & { currentTarget: HTMLInputElement }): void {
+  const input = event.currentTarget;
+  custom = typeCustom(input.value !== "" || input.validity.badInput, input.valueAsNumber);
+}
+
+/** Enter で足す。足せたときだけ欄を空にし、足せなければ値を残して欄の下に問題を出す */
 function addCustom(event: KeyboardEvent & { currentTarget: HTMLInputElement }): void {
   if (event.key !== "Enter") {
     return;
   }
   event.preventDefault();
-  draft = addMinutes(draft, event.currentTarget.valueAsNumber);
-  event.currentTarget.value = "";
+  ({ draft, custom } = enterCustom(draft, custom));
+  if (!custom.filled) {
+    event.currentTarget.value = "";
+  }
 }
 
 /** 保存できたら閉じる。断られたら（通知が出る）下書きを残して開いたままにする。変更がなければ書かずに閉じる */
@@ -151,9 +168,21 @@ async function save(): Promise<void> {
       {/each}
       <div class="custom">
         <label for="work-dialog-custom">任意</label>
-        <input id="work-dialog-custom" type="number" min="1" placeholder="分" onkeydown={addCustom}>
+        <input
+          id="work-dialog-custom"
+          type="number"
+          min="1"
+          placeholder="分"
+          aria-describedby="work-dialog-custom-problem"
+          aria-invalid={problem === "invalid"}
+          oninput={typeInCustom}
+          onkeydown={addCustom}
+        >
       </div>
     </div>
+    <p id="work-dialog-custom-problem" class="custom-problem" aria-live="polite" hidden={!problem}>
+      {problem ? CUSTOM_PROBLEM_MESSAGES[problem] : ""}
+    </p>
   </div>
 
   <div class="total">
@@ -170,7 +199,7 @@ async function save(): Promise<void> {
       <button
         type="button"
         class="mod-cta"
-        disabled={!canSave(draft) || saving}
+        disabled={!canSave(draft, custom) || saving}
         onclick={() => void save()}
       >
         保存
@@ -315,6 +344,14 @@ async function save(): Promise<void> {
 .custom input {
   width: 80px;
   height: 44px;
+  text-align: right;
+}
+
+/* 任意の欄の問題。設定画面の問題（styles.css）と同じ色で、欄の下に右寄せで出す */
+.custom-problem {
+  margin: calc(-1 * var(--size-4-1)) 0 0;
+  color: var(--text-error);
+  font-size: var(--font-ui-smaller);
   text-align: right;
 }
 
