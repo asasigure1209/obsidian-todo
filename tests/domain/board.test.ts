@@ -193,12 +193,11 @@ describe("runningCard", () => {
     target: { index, text },
   });
 
-  it("計測中の対象のカードを示す。「何個目」は、そのカードのポモドーロの行の数＋1", () => {
+  it("計測中の対象のカードを示す", () => {
     const running = runningAt(1, "- [/] 提案資料の構成を固める [est:: 3]");
     expect(runningCard(boardOf(board), running)).toEqual({
       key: "- [/] 提案資料の構成を固める [est:: 3]#0",
       startedAt,
-      count: 2,
     });
   });
 
@@ -219,7 +218,7 @@ describe("toBoardView", () => {
   it("この日のタイマーの対象が見つかれば、計測中のカードを示す", () => {
     const view = toBoardView(parseDocument(body), timer, "2026-11-05");
     expect(view.board.doing.map((c) => c.name)).toEqual(["提案資料"]);
-    expect(view.running).toEqual({ key: "- [/] 提案資料#0", startedAt: 0, count: 1 });
+    expect(view.running).toEqual({ key: "- [/] 提案資料#0", startedAt: 0 });
   });
 
   it("その日の予定を、読める行だけ書いた順に持つ", () => {

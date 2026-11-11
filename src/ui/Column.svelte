@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { BoardSession } from "@/app/board/session";
 import type { Card as CardModel, RunningCard } from "@/domain/board";
+import type { EditKind } from "@/domain/day";
 import type { Status } from "@/domain/document/todo-line";
 import Card from "./Card.svelte";
 import { type Drop, sortable } from "./sortable";
@@ -13,19 +14,23 @@ interface Props {
   session: BoardSession;
   onDrop: (drop: Drop) => void;
   openWork: (card: CardModel) => void;
+  /** その日にできる操作か（design 8.3） */
+  can: (kind: EditKind) => boolean;
 }
 
-const { title, status, cards, running, session, onDrop, openWork }: Props = $props();
+const { title, status, cards, running, session, onDrop, openWork, can }: Props = $props();
 </script>
 
 <section class="column">
-  <h3 class="column-title">
-    {title}
-    <span class="count">{cards.length}</span>
-  </h3>
-  {#if status === "doing" && cards.length === 0}
-    <p class="hint">カードをここへ動かすとタイマーが始まります</p>
-  {/if}
+  <div class="column-head">
+    <h2 class="column-title">
+      {title}
+      <span class="count">{cards.length}</span>
+    </h2>
+    {#if status === "todo"}
+      <span class="priority">上ほど優先</span>
+    {/if}
+  </div>
   <ol class="cards" use:sortable={{ status, onDrop }}>
     {#each cards as card, i (card.key)}
       <li data-key={card.key}>
@@ -34,48 +39,63 @@ const { title, status, cards, running, session, onDrop, openWork }: Props = $pro
           {status}
           {session}
           {openWork}
+          {can}
           position={i + 1}
           running={running?.key === card.key ? running : undefined}
         />
       </li>
     {/each}
   </ol>
+  <!-- カードがあってもなくても、列のいちばん下に出す（design 5章 M1）。動かせない日には出さない（8.3） -->
+  {#if status === "doing" && can("move")}
+    <p class="hint">カードをここへ動かすとタイマーが始まります</p>
+  {/if}
 </section>
 
 <style>
+/* 列は枠や背景を持たず、ボードの背景の上にカードを並べる（モック M1） */
 .column {
   display: flex;
   flex-direction: column;
-  gap: var(--size-4-2);
-  padding: var(--size-4-3);
-  border-radius: var(--radius-l);
-  background-color: var(--background-secondary);
+  gap: 12px;
+  min-height: 0;
+}
+
+.column-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
 }
 
 .column-title {
-  display: flex;
-  align-items: center;
-  gap: var(--size-4-2);
   margin: 0;
-  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+  font-size: 16px;
+  font-weight: var(--font-bold);
 }
 
 .count {
   color: var(--text-muted);
-  font-size: var(--font-ui-small);
-  font-weight: normal;
+  font-weight: var(--font-normal);
+}
+
+.priority {
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .hint {
   margin: 0;
+  padding: 0 4px;
   color: var(--text-muted);
-  font-size: var(--font-ui-small);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .cards {
   display: flex;
   flex-direction: column;
-  gap: var(--size-4-2);
+  gap: 12px;
   /* 空の列にもドロップできるようにする */
   min-height: 3rem;
   margin: 0;
