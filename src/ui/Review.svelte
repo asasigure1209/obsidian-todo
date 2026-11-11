@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { BoardState } from "@/app/board/session";
+import { dayWord as dayWordOf } from "@/app/messages";
 import { formatDayLabel } from "@/domain/day";
 import {
   formatActual,
@@ -8,6 +9,7 @@ import {
   formatOverrun,
   toReview,
 } from "@/domain/review";
+import DayNotice from "./DayNotice.svelte";
 
 interface Props {
   dayKey: string;
@@ -38,7 +40,7 @@ const {
 
 const review = $derived(view.kind === "board" ? toReview(view.board) : undefined);
 /** ボードの知らせと同じく、今日以外は「この日」と言う */
-const dayWord = $derived(isToday ? "今日" : "この日");
+const dayWord = $derived(dayWordOf(isToday));
 const nextDayWord = $derived(isToday ? "明日" : "翌日");
 
 /** 開いたら「ボードに戻る」にフォーカスを置く */
@@ -172,10 +174,8 @@ $effect(() => {
         </section>
       </div>
     </div>
-  {:else if view.kind === "missing"}
-    <p class="message">{dayWord}のファイルがありません</p>
-  {:else if view.kind === "unreadable"}
-    <p class="message">{dayWord}のファイルを読めませんでした。ファイルを保存し直すと読み直します</p>
+  {:else if view.kind === "missing" || view.kind === "unreadable"}
+    <div class="notice"><DayNotice kind={view.kind} {isToday} /></div>
   {/if}
 </div>
 
@@ -396,8 +396,7 @@ $effect(() => {
   color: var(--background-primary);
 }
 
-.message {
-  padding: 0 28px;
-  color: var(--text-muted);
+.notice {
+  padding: 28px;
 }
 </style>
