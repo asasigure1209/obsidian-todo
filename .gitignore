@@ -10,3 +10,5 @@ dev-vault/.obsidian/plugins/*
 !dev-vault/.obsidian/plugins/daily-kanban-todo
 reports/
 .stryker-tmp/
+# サブエージェントの作業用 worktree（Biome が入れ子の biome.json を読んで止まる）
+.claude/worktrees/

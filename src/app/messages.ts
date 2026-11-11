@@ -16,6 +16,13 @@ export const expiredMessage = (text: string) =>
 export const DISCARDED_MESSAGE =
   "着手中のカードが見つからないため、計測を取りやめました（記録していません）";
 export const missingMessage = (dayKey: string) => `${dayKey} のファイルがありません`;
+/** ボードと M3 の文言の「今日」「この日」 */
+export const dayWord = (isToday: boolean) => (isToday ? "今日" : "この日");
+/** その日のファイルを出せないときの、ボードと M3 の知らせ */
+export const dayFileNotice = (kind: "missing" | "unreadable", isToday: boolean) =>
+  kind === "missing"
+    ? `${dayWord(isToday)}のファイルがありません`
+    : `${dayWord(isToday)}のファイルを読めませんでした。ファイルを保存し直すと読み直します`;
 export const PAST_DAY_MESSAGE = "過去の日は、作業時間の修正だけができます";
 export const TODAY_FILE_EXISTS_MESSAGE =
   "今日のファイルはもうあったので、上書きせずにそのファイルを出しました";

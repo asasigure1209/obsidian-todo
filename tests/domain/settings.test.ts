@@ -54,10 +54,11 @@ const validWorkday: fc.Arbitrary<Workday> = fc
     return fc.array(inside, { maxLength: 4 }).map((breaks) => ({ hours, breaks }));
   });
 
-const validFolder = fc
-  .string({ minLength: 1 })
-  .map((s) => s.trim().replace(/^\/+|\/+$/g, ""))
-  .filter((s) => s !== "");
+/**
+ * 読み直しても変わらないフォルダ名。前後を1回ずつ削る作り方では「/ !」から「 !」ができ、
+ * 読み直すと空白が除かれて落ちる（乱数によって落ちていた）。読めるかどうかで選ぶ
+ */
+const validFolder = fc.string({ minLength: 1 }).filter(isFolder);
 
 const validSettings: fc.Arbitrary<Settings> = fc.record({
   folders: fc.record({ todo: validFolder, workLog: validFolder, dailyReport: validFolder }),

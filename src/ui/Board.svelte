@@ -6,6 +6,7 @@ import { type Card, dayProgress } from "@/domain/board";
 import { canEdit, dayFilePath, toDayKey } from "@/domain/day";
 import type { Settings } from "@/domain/settings";
 import Column from "./Column.svelte";
+import DayNotice from "./DayNotice.svelte";
 import Header from "./Header.svelte";
 import Review from "./Review.svelte";
 import type { Drop } from "./sortable";
@@ -103,9 +104,6 @@ $effect(() => {
 const progress = $derived(
   $session.kind === "board" ? dayProgress($session.board, $session.events, workday) : undefined,
 );
-/** 知らせの文言の「今日」「この日」 */
-const dayWord = $derived(isToday ? "今日" : "この日");
-
 const COLUMNS = [
   ["todo", "今日やる"],
   ["doing", "着手中"],
@@ -136,63 +134,61 @@ function handleDrop(drop: Drop): void {
     {openWorkLog}
     {openDailyReport}
   />
-{/if}
+{:else}
+  <!-- 振り返りの間はボードを描かない（隠したまま毎秒描き直さない）。振り返りは、その日のファイルを読めた日に出す（過去の日も） -->
+  <div class="board">
+    <Header
+      bind:this={header}
+      {dayKey}
+      {progress}
+      {isToday}
+      {showDay}
+      openWorkLog={() => openWorkLog(workLogPath)}
+      openReview={$session.kind === "board" ? () => (reviewing = true) : undefined}
+    />
 
-<!-- 振り返りの間はボードを隠すだけ（作り直さない）。振り返りは、その日のファイルを読めた日に出す（過去の日も） -->
-<div class="board" class:hidden={reviewing}>
-  <Header
-    bind:this={header}
-    {dayKey}
-    {progress}
-    {isToday}
-    {showDay}
-    openWorkLog={() => openWorkLog(workLogPath)}
-    openReview={$session.kind === "board" ? () => (reviewing = true) : undefined}
-  />
-
-  <div class="board-body">
-    <aside class="sidebar">
-      {#if $session.kind === "board"}
-        <Timeline events={$session.events} {workday} {now} {isToday} />
-      {/if}
-      <!-- 過去の日には追加できないので出さない（design 8.3） -->
-      {#if $session.kind === "board" && canAdd}
-        <button type="button" class="add-todo" onclick={openAdd}>＋ TODOを追加</button>
-      {/if}
-    </aside>
-
-    <div class="main">
-      {#if $session.kind === "board"}
-        <div class="columns">
-          {#each COLUMNS as [status, title] (status)}
-            <Column
-              {title}
-              {status}
-              {session}
-              cards={$session.board[status]}
-              running={$session.running}
-              onDrop={handleDrop}
-              {openWork}
-              can={(kind) => canEdit(kind, dayKey, today)}
-            />
-          {/each}
-        </div>
-      {:else if $session.kind === "missing"}
-        <p class="message">{dayWord}のファイルがありません</p>
-        <!-- 過去の日は作れない（design 7.8・8.3）。作るときは session が改めて確かめる -->
-        {#if canCreate}
-          <button type="button" class="create-day" disabled={creating} onclick={createToday}>
-            今日のファイルを作る
-          </button>
+    <div class="board-body">
+      <aside class="sidebar">
+        {#if $session.kind === "board"}
+          <Timeline events={$session.events} {workday} {now} {isToday} />
         {/if}
-      {:else if $session.kind === "unreadable"}
-        <p class="message">
-          {dayWord}のファイルを読めませんでした。ファイルを保存し直すと読み直します
-        </p>
-      {/if}
+        <!-- 過去の日には追加できないので出さない（design 8.3） -->
+        {#if $session.kind === "board" && canAdd}
+          <button type="button" class="add-todo" onclick={openAdd}>＋ TODOを追加</button>
+        {/if}
+      </aside>
+
+      <div class="main">
+        {#if $session.kind === "board"}
+          <div class="columns">
+            {#each COLUMNS as [status, title] (status)}
+              <Column
+                {title}
+                {status}
+                {session}
+                cards={$session.board[status]}
+                running={$session.running}
+                onDrop={handleDrop}
+                {openWork}
+                can={(kind) => canEdit(kind, dayKey, today)}
+              />
+            {/each}
+          </div>
+        {:else if $session.kind === "missing" || $session.kind === "unreadable"}
+          <div class="notice">
+            <DayNotice kind={$session.kind} {isToday} />
+            <!-- 過去の日は作れない（design 7.8・8.3）。作るときは session が改めて確かめる -->
+            {#if $session.kind === "missing" && canCreate}
+              <button type="button" class="create-day" disabled={creating} onclick={createToday}>
+                今日のファイルを作る
+              </button>
+            {/if}
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
-</div>
+{/if}
 
 <style>
 .board {
@@ -200,11 +196,6 @@ function handleDrop(drop: Drop): void {
   flex-direction: column;
   height: 100%;
   color: var(--text-normal);
-}
-
-/* 終業の振り返り（M3）を出している間 */
-.board.hidden {
-  display: none;
 }
 
 /* 左にサイドバー、右に3列（モック M1） */
@@ -252,8 +243,11 @@ function handleDrop(drop: Drop): void {
   align-items: start;
 }
 
-.message {
-  color: var(--text-muted);
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--size-4-4);
 }
 
 /* 「今日のファイルがありません」の下に置く（design 7.8） */
