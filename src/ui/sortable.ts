@@ -25,6 +25,8 @@ export const sortable: Action<HTMLElement, Options> = (node, initial) => {
   const instance = Sortable.create(node, {
     group: "board",
     animation: 150,
+    // 列の中のヒント（<li class="hint">）は動かさず、位置の数にも入れない
+    draggable: "li[data-key]",
     // カードの中のボタンを押してもドラッグを始めず、クリックはそのまま通す
     filter: "button",
     preventOnFilter: false,

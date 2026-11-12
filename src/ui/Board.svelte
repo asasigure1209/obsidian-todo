@@ -242,7 +242,8 @@ function handleDrop(drop: Drop): void {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--size-4-5);
-  align-items: start;
+  /* 列をボードの下まで伸ばし、ドロップの受け皿を広げる */
+  min-height: 100%;
 }
 
 .notice {
