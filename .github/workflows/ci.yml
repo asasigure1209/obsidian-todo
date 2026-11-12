@@ -24,3 +24,24 @@ jobs:
         run: pnpm coverage
       - name: ビルド
         run: pnpm build
+
+  # Dependabot の PR のうち、グループ tooling と actions の minor・patch だけ、verify が通った後にマージする（AD-12）
+  dependabot-merge:
+    needs: verify
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+      - name: マージ
+        if: >-
+          steps.meta.outputs.update-type != 'version-update:semver-major' &&
+          (steps.meta.outputs.dependency-group == 'tooling' ||
+           steps.meta.outputs.dependency-group == 'actions')
+        run: gh pr merge --merge "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
