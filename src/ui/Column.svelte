@@ -45,11 +45,12 @@ const { title, status, cards, running, session, onDrop, openWork, can }: Props =
         />
       </li>
     {/each}
+    <!-- カードがあってもなくても、カードの下に出す（design 5章 M1）。動かせない日には出さない（8.3）。
+         受け皿の中に置き、ヒントの上や下へ落としても着手中に入るようにする -->
+    {#if status === "doing" && can("move")}
+      <li class="hint">カードをここへ動かすとタイマーが始まります</li>
+    {/if}
   </ol>
-  <!-- カードがあってもなくても、列のいちばん下に出す（design 5章 M1）。動かせない日には出さない（8.3） -->
-  {#if status === "doing" && can("move")}
-    <p class="hint">カードをここへ動かすとタイマーが始まります</p>
-  {/if}
 </section>
 
 <style>
@@ -96,7 +97,8 @@ const { title, status, cards, running, session, onDrop, openWork, can }: Props =
   display: flex;
   flex-direction: column;
   gap: 12px;
-  /* 空の列にもドロップできるようにする */
+  /* 受け皿を列の下まで広げ、カードの下のどこへ落としてもその列に入るようにする */
+  flex: 1;
   min-height: 3rem;
   margin: 0;
   padding: 0;
