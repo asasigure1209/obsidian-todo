@@ -1,0 +1,68 @@
+# 依存の更新（docs/architecture.md の AD-12）
+# 自動マージするのはグループ tooling と actions の minor・patch だけ（.github/workflows/dependabot-auto-merge.yml）
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    # 公開されてすぐの版は取り込まない
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      # TypeScript は 6 系固定（svelte-check が 7 未対応）
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # Node 24 に合わせる
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    # 先に当てはまったグループに入る
+    groups:
+      # ビルド結果に影響するもの。dev-vault で確かめてから手でマージする
+      bundled:
+        patterns:
+          - svelte
+          - sortablejs
+          - "@types/sortablejs"
+          - esbuild
+          - esbuild-svelte
+        update-types: [minor, patch]
+      # 開発の道具。CI が通れば自動でマージする
+      tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+      # 一緒に上げないと壊れるもの（major は手でマージする）
+      vitest-major:
+        patterns: [vitest, "@vitest/*"]
+        update-types: [major]
+      stryker-major:
+        patterns: ["@stryker-mutator/*"]
+        update-types: [major]
+      codemirror-major:
+        patterns: ["@codemirror/*"]
+        update-types: [major]
+      esbuild-major:
+        patterns: [esbuild, esbuild-svelte]
+        update-types: [major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]

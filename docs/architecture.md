@@ -215,6 +215,28 @@
   - 計測中に TODO のフォルダを変えると、タイマーは新しいフォルダの同じ日付のファイルで対象を探す。見つからなければ保留にする（AD-6）。フォルダの変更では変更イベントが来ないので、保留の読み直しは次の変更か操作のとき
   - 設定画面は入力のたびに保存する（`data.json` に書く回数は増えるが、書き込みは並べてあるので順番どおりに残る）
 
+### AD-12 依存の更新は Dependabot に任せ、CI だけで確かめられるものを自動でマージする
+
+- **決定：**
+  - Dependabot（`.github/dependabot.yml`）で、npm（pnpm）と GitHub Actions の更新を週1回（月曜 9:00）PR にする。公開から7日たった版だけを対象にする（cooldown）
+  - `typescript` と `@types/node` の major は上げない（TypeScript は 6 系固定、Node は 24）
+  - minor・patch はグループにまとめる
+    - `bundled`：ビルド結果に影響するもの（`svelte`・`sortablejs`・`esbuild`・`esbuild-svelte`）。手でマージする
+    - `tooling`：残りの devDependencies。CI が通れば自動でマージする
+    - `actions`：GitHub Actions。CI が通れば自動でマージする
+  - major は手でマージする。一緒に上げないと壊れるもの（`vitest` と `@vitest/*`、`@stryker-mutator/*`、`@codemirror/*`、`esbuild` と `esbuild-svelte`）は1つの PR にまとめる
+  - 自動マージは `.github/workflows/dependabot-auto-merge.yml` が予約する（`gh pr merge --auto`）。マージは `main` の必須チェック `verify` が通るまで待つ
+- **理由：**
+  - 依存を古いまま置くと、上げるときの差分が大きくなり、脆弱性の修正も遅れる。小さく頻繁に上げる
+  - UI は手動の確認手順で確かめる（[test-strategy.md](test-strategy.md)）。ビルド結果に入るものは CI が通っても壊れていないと言い切れないので、`dev-vault/` で確かめてからマージする。開発の道具は CI（整形・Lint・型・テスト・ビルド）で壊れたことがわかる
+  - 公開されてすぐの版には、乗っ取られたパッケージや取り下げられる版が混じりやすい。7日待てば多くは見つかる
+- **影響：**
+  - 自動マージには、リポジトリの「Allow auto-merge」と、`main` の必須チェック `verify` が要る。必須チェックがないと CI を待たずにマージされる
+  - 自動マージは GITHUB_TOKEN で行うので、マージ後の `main` への push では CI が動かない（PR で通っている）
+  - `packageManager` の pnpm と `mise.toml` の Node は Dependabot が上げない。手で上げる
+  - セキュリティの更新はグループに入らないので、手でマージする
+  - `pnpm mutation` は CI にないので、`tooling` の自動マージでは確かめない。Stryker と Vitest の major は手で上げるときに走らせる
+
 ---
 
 ## 3. ディレクトリ構成（案）

@@ -7,7 +7,7 @@ Obsidian プラグイン。1日単位のカンバン型TODOボード＋ポモド
 ## ドキュメント
 
 - `docs/design.md` — 仕様の正。実装方法は書かない。仕様変更時は理由と 10章「検討の経緯」も更新
-- `docs/architecture.md` — 実装の決定（AD-1〜AD-11）
+- `docs/architecture.md` — 実装の決定（AD-1〜AD-12）
 - `docs/test-strategy.md` — TDD・テストサイズ・観点
 
 ## コマンド
@@ -55,4 +55,5 @@ pnpm verify                    # CI と同じ全項目
 - 認知複雑度の上限は 5（テスト除く）
 - Biome は Markdown 対象外
 - TypeScript は 6 系固定（svelte-check が 7 未対応）
+- 依存の更新は Dependabot（AD-12）。`bundled` と major の PR は `dev-vault/` で確かめてから手でマージ
 - 動作確認は `dev-vault/`（`plugins/daily-kanban-todo` → `build/` のシンボリックリンク）
