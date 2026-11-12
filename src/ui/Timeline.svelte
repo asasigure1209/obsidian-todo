@@ -37,31 +37,34 @@ const summary = $derived(focus(events, workday, minute));
 
 <section class="schedule">
   <h2 class="heading">{isToday ? "今日の予定" : "予定"}（Googleカレンダー）</h2>
-  <div class="timeline" style:height="{(hours.end - hours.start) * PX_PER_MINUTE}px">
-    {#each hourMarks(hours) as mark (mark.hour)}
-      <div class="mark" style:top="{mark.top * PX_PER_MINUTE}px">
-        <span class="mark-label">{mark.hour}:00</span>
-        <div class="mark-line"></div>
-      </div>
-    {/each}
-    <!-- 同じ時刻と名前の予定が2件あってもよいので、キーは付けない -->
-    {#each timelineBlocks(events, hours) as block}
-      <div
-        class="event"
-        style:top="{block.top * PX_PER_MINUTE}px"
-        style:height="{Math.max(block.height * PX_PER_MINUTE, MIN_BLOCK_PX)}px"
-      >
-        <span class="event-title">{block.event.title}</span>
-        <span class="event-time">{formatClock(block.event.start)}</span>
-      </div>
-    {/each}
-    {#if nowTop !== undefined}
-      <div class="now" style:top="{nowTop * PX_PER_MINUTE}px">
-        <span class="visually-hidden">現在時刻 {formatClock(minute)}</span>
-        <span class="now-dot"></span>
-        <div class="now-line"></div>
-      </div>
-    {/if}
+  <!-- 就業時間が長いと画面に収まらないので、目盛りの部分だけスクロールする（見出しと集中できる時間は出したまま） -->
+  <div class="timeline-scroll">
+    <div class="timeline" style:height="{(hours.end - hours.start) * PX_PER_MINUTE}px">
+      {#each hourMarks(hours) as mark (mark.hour)}
+        <div class="mark" style:top="{mark.top * PX_PER_MINUTE}px">
+          <span class="mark-label">{mark.hour}:00</span>
+          <div class="mark-line"></div>
+        </div>
+      {/each}
+      <!-- 同じ時刻と名前の予定が2件あってもよいので、キーは付けない -->
+      {#each timelineBlocks(events, hours) as block}
+        <div
+          class="event"
+          style:top="{block.top * PX_PER_MINUTE}px"
+          style:height="{Math.max(block.height * PX_PER_MINUTE, MIN_BLOCK_PX)}px"
+        >
+          <span class="event-title">{block.event.title}</span>
+          <span class="event-time">{formatClock(block.event.start)}</span>
+        </div>
+      {/each}
+      {#if nowTop !== undefined}
+        <div class="now" style:top="{nowTop * PX_PER_MINUTE}px">
+          <span class="visually-hidden">現在時刻 {formatClock(minute)}</span>
+          <span class="now-dot"></span>
+          <div class="now-line"></div>
+        </div>
+      {/if}
+    </div>
   </div>
   {#if isToday}
     <p class="focus">
@@ -79,6 +82,7 @@ const summary = $derived(focus(events, workday, minute));
   display: flex;
   flex-direction: column;
   gap: var(--size-4-3);
+  min-height: 0;
 }
 
 .heading {
@@ -88,9 +92,16 @@ const summary = $derived(focus(events, workday, minute));
   font-weight: var(--font-bold);
 }
 
+/* 縮められるのはここだけ。目盛りの文字は線の上下にはみ出すので、その分の余白を内側に取る */
+.timeline-scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  padding: 8px 0;
+  overflow-y: auto;
+}
+
 .timeline {
   position: relative;
-  margin-top: 6px;
 }
 
 .mark {

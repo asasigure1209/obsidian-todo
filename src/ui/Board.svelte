@@ -211,12 +211,14 @@ function handleDrop(drop: Drop): void {
   flex-shrink: 0;
   gap: 28px;
   width: 300px;
+  min-height: 0;
   padding: var(--size-4-6);
   border-right: 1px solid var(--background-modifier-border);
 }
 
-/* サイドバーのいちばん下に置く */
+/* サイドバーのいちばん下に置く。タイムラインが長くても押し出されない */
 .add-todo {
+  flex-shrink: 0;
   width: 100%;
   height: 44px;
   margin-top: auto;
