@@ -1,5 +1,5 @@
 # 依存の更新（docs/architecture.md の AD-12）
-# 自動マージするのはグループ tooling と actions の minor・patch だけ（.github/workflows/dependabot-auto-merge.yml）
+# 自動マージするのはグループ tooling と actions の minor・patch だけ（.github/workflows/ci.yml の dependabot-merge）
 version: 2
 updates:
   - package-ecosystem: npm

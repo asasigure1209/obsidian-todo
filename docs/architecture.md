@@ -225,14 +225,16 @@
     - `tooling`：残りの devDependencies。CI が通れば自動でマージする
     - `actions`：GitHub Actions。CI が通れば自動でマージする
   - major は手でマージする。一緒に上げないと壊れるもの（`vitest` と `@vitest/*`、`@stryker-mutator/*`、`@codemirror/*`、`esbuild` と `esbuild-svelte`）は1つの PR にまとめる
-  - 自動マージは `.github/workflows/dependabot-auto-merge.yml` が予約する（`gh pr merge --auto`）。マージは `main` の必須チェック `verify` が通るまで待つ
+  - 自動マージは CI（`.github/workflows/ci.yml`）の `dependabot-merge` ジョブが行う。`verify` ジョブが通った後にだけ動く（`needs: verify`）。使う Action はコミットの SHA で固定する
 - **理由：**
   - 依存を古いまま置くと、上げるときの差分が大きくなり、脆弱性の修正も遅れる。小さく頻繁に上げる
   - UI は手動の確認手順で確かめる（[test-strategy.md](test-strategy.md)）。ビルド結果に入るものは CI が通っても壊れていないと言い切れないので、`dev-vault/` で確かめてからマージする。開発の道具は CI（整形・Lint・型・テスト・ビルド）で壊れたことがわかる
   - 公開されてすぐの版には、乗っ取られたパッケージや取り下げられる版が混じりやすい。7日待てば多くは見つかる
+  - GitHub の自動マージ（`gh pr merge --auto`）は、`main` に必須チェックがないと CI を待たずにマージする。同じ CI の中で `verify` の後に並べれば、リポジトリの設定（ブランチ保護・「Allow auto-merge」）がなくても、通ったものだけをマージできる
+  - マージのジョブは書き込みの権限で動くので、Action はタグではなく SHA で固定する。タグが書き換えられても、知らないコードが動かない
 - **影響：**
-  - 自動マージには、リポジトリの「Allow auto-merge」と、`main` の必須チェック `verify` が要る。必須チェックがないと CI を待たずにマージされる
   - 自動マージは GITHUB_TOKEN で行うので、マージ後の `main` への push では CI が動かない（PR で通っている）
+  - マージの時点で `main` が進んでいても、取り込んだ後の状態では CI を走らせない。変更が依存の版だけなので、ぶつかることは少ない
   - `packageManager` の pnpm と `mise.toml` の Node は Dependabot が上げない。手で上げる
   - セキュリティの更新はグループに入らないので、手でマージする
   - `pnpm mutation` は CI にないので、`tooling` の自動マージでは確かめない。Stryker と Vitest の major は手で上げるときに走らせる
