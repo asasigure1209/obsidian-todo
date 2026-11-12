@@ -10,7 +10,7 @@ export const noticeNotifier: Notifier = {
 
 /** OS の通知に出す名前（manifest.json の name） */
 const APP_NAME = "Daily Kanban TODO";
-const BEEP_SECONDS = 0.6;
+const BEEP_SECONDS = 2;
 
 /**
  * 25分の満了の知らせ。Obsidian が背面にあっても気づけるよう、次の3つで知らせる（design 8.1）
